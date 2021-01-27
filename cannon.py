@@ -24,6 +24,9 @@ COLOUR_RED     = [255,0,0]
 COLOUR_BLOCKER = [0,0,255]
 COLOUR_BOMBER_ON = [255,255,0]
 COLOUR_BOMBER_OFF = [180,180,255]
+COLOUR_BASE       = [255,255,0]
+MAX_BOMBERS = 10
+MAX_BLOCKERS = 10
 
 # ======================================================================
 # setup pygame
@@ -120,7 +123,7 @@ class ParticleSystem():
             # vary the angle a little bit
             angle = (angle + random.uniform(-spread, spread)) % 360
             speed = random.uniform(0.1, 0.7)
-            size = random.randint(1, 4)
+            size = random.randint(1, 10)
             p = Partical(self.pos, angle, speed, size, COLOUR_YELLOW)
             self.particles.append(p)
             
@@ -426,10 +429,10 @@ class Blocker():
 
 class Bomber():
 
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, vy):
         
         self.pos = Vector2(x, y)
-        self.vel = Vector2(0, 0)
+        self.vel = Vector2(0, vy)
         self.width = w
         self.height = h
         self.rect = pygame.Rect(x, y, self.width, self.height)
@@ -455,6 +458,40 @@ class Bomber():
             self.image.fill(COLOUR_BOMBER_ON)
         else:
             self.image.fill(COLOUR_BOMBER_OFF)
+        
+        self.pos.add(self.vel)
+        self.dead = self.pos.y > SCREEN_HEIGHT
+        
+        self.rect.x = self.pos.x
+        self.rect.y = self.pos.y
+        
+    def draw(self):
+        
+        screen.blit(self.image, self.rect)
+        
+      
+# ======================================================================
+# base class
+# ======================================================================
+
+class Base():
+
+    def __init__(self, x, y, w, h):
+        
+        self.pos = Vector2(x, y)
+        self.vel = Vector2(0, 0)
+        self.width = w
+        self.height = h
+        self.rect = pygame.Rect(x, y, self.width, self.height)
+        self.image = pygame.Surface([self.width, self.height])
+        self.image.fill(COLOUR_BASE)
+        self.dead = False
+        
+    def isDead(self):
+        
+        return self.dead == True
+        
+    def update(self):
         
         self.pos.add(self.vel)
         if self.pos.x < 0:
@@ -490,7 +527,7 @@ class Scoreboard():
         
         #lerp to the target score
         if self.score < self.targetscore:
-            self.score = self.lerp(self.score, self.targetscore, 0.05)
+            self.score = self.lerp(self.score, self.targetscore, 0.02)
         
     def lerp(self, mn, mx, norm):
     
@@ -501,8 +538,8 @@ class Scoreboard():
         
         msg = 'WAVE {} FIRED {}/{} SCORE {}'.format(wavenumber, fired, maxballs, self.score)
         textsurf = myfont.render(msg, 0, COLOUR_RED)
-        textsurf.set_alpha(110)
-        screen.blit(textsurf, (10,570))
+        textsurf.set_alpha(160)
+        screen.blit(textsurf, (20,20))
         
 
 
@@ -554,11 +591,13 @@ class Game():
         self.psc = ParticleSystemController()
         self.scoreboard = Scoreboard()
         self.balls = []
+        self.bases = []
         self.targets = []
         self.blockers = []
         self.bombers = []
         
         self.gravity = Vector2(0,0.3)
+        self.startGame()
 
     def getFriction(self, ball):
         
@@ -591,6 +630,13 @@ class Game():
         self.shots_fired = 0
         self.balls = [Cannonball(self.cannon.pos.x, self.cannon.pos.y) for i in range(0, self.maxballs)]
         self.cannon.load(self.balls)
+        
+    def startGame(self):
+        
+        self.bases = []
+        for x in range(0,4):
+            b = Base(300 + x * 150, 580, 50, 10)
+            self.bases.append(b)
 
     def spawnWave(self):
         
@@ -602,22 +648,42 @@ class Game():
             self.targets.append(t)
 
         self.blockers = []
-        for x in range(0, self.wave_number):
+        for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
             b = Blocker(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 3, 40)
             self.blockers.append(b)
             
         self.bombers = []
-        for x in range(0, self.wave_number):
-            b = Bomber(600, 400, 8, 8)
+        for x in range(0, min(self.wave_number, MAX_BOMBERS)):
+            b = Bomber(random.randint(300, 800), 0, 24, 12, 0.2 + (random.random() * 0.2))
             self.bombers.append(b)
 
     def checkCollisions(self):
         
+        for bomber in self.bombers:
+            for base in self.bases:
+                if bomber.rect.colliderect(base.rect):
+                    base.dead = True
+                    bomber.dead = True
+                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
+                    sound_big_boom.play()
+                    
+        for bomber in self.bombers:
+            for ball in self.balls:
+                if bomber.rect.colliderect(ball.rect):
+                    bomber.dead = True
+                    ball.dead = True
+                    self.scoreboard.add(1000)
+                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
+                    sound_big_boom.play()
+                    
         for blocker in self.blockers:
             for ball in self.balls:
                 if blocker.rect.colliderect(ball.rect):
+                    if ball.vel.x > 0: #ball hit from the left
+                        ball.pos.x -= 4
+                    else:
+                        ball.pos.x += 4 # hit was from the right
                     ball.vel.x = -ball.vel.x
-                    ball.pos.x -= 10
                     sound_blocker.play()
  
         
@@ -639,6 +705,13 @@ class Game():
         
         bc = [b for b in self.balls if not b.isDead()]
         self.balls = bc
+        
+        bl = [b for b in self.bombers if not b.isDead()]
+        self.bombers = bl
+        
+        ba = [b for b in self.bases if not b.isDead()]
+        self.bases = ba
+        
             
     def fireCannon(self, mx, my):
         
@@ -681,6 +754,9 @@ class Game():
         for bomber in self.bombers:
             bomber.update()
             
+        for base in self.bases:
+            base.update()
+            
         self.checkCollisions()
         
         for target in self.targets:
@@ -694,6 +770,9 @@ class Game():
             
         for ball in self.balls:
             ball.draw()
+            
+        for base in self.bases:
+            base.draw()
             
         
         
