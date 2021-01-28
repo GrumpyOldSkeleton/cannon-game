@@ -10,7 +10,7 @@ from vector import Vector2
 
 GAME_STATE_INTRO       = 0
 GAME_STATE_IN_PROGRESS = 1
-GAME_STATE_SCORED      = 2
+GAME_STATE_WAVE_OVER   = 2
 GAME_STATE_OVER        = 3
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 600
@@ -21,12 +21,13 @@ COLOUR_WHITE   = [255,255,255]
 COLOUR_STARS   = [100,50,255]
 COLOUR_YELLOW  = [255,255,0]
 COLOUR_RED     = [255,0,0]
-COLOUR_BLOCKER = [0,0,255]
+COLOUR_BLOCKER = [255,0,255]
 COLOUR_BOMBER_ON = [255,255,0]
-COLOUR_BOMBER_OFF = [180,180,255]
+COLOUR_BOMBER_OFF = [200,0,0]
 COLOUR_BASE       = [255,255,0]
 MAX_BOMBERS = 10
-MAX_BLOCKERS = 10
+MAX_BLOCKERS = 8
+MAX_WAVE_TIME = 60 # length of wave in seconds
 
 # ======================================================================
 # setup pygame
@@ -52,10 +53,11 @@ sound_big_boom  = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'big_boom.o
 sound_gunfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'gunfire.ogg')))
 sound_dryfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'dryfire.ogg')))
 sound_blocker   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'blocker.ogg')))
+sound_base_boom = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'base_explode.ogg')))
 
-myfont = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 20)
+myfont   = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 20)
 myfont10 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 10)
-
+myfonttitle = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 80)
 
 #=======================================================================
 # Partical class
@@ -270,7 +272,7 @@ class Cannonball():
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.acc = Vector2(0, 0)
-        self.size = 4
+        self.size = 8
         self.mass = 30
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
@@ -505,7 +507,7 @@ class Base():
         screen.blit(self.image, self.rect)
         
 # ======================================================================
-# scoreboard class - along the base of the screen
+# scoreboard class
 # ======================================================================
 
 class Scoreboard():
@@ -522,10 +524,10 @@ class Scoreboard():
     def reset(self):
         
         self.score = 0
+        self.targetscore = 0
         
     def update(self):
         
-        #lerp to the target score
         if self.score < self.targetscore:
             self.score = self.lerp(self.score, self.targetscore, 0.02)
         
@@ -533,10 +535,9 @@ class Scoreboard():
     
         return math.ceil(((mx - mn) * norm + mn))
         
-    
-    def draw(self, fired, maxballs, wavenumber):
+    def draw(self, fired, maxballs, wavenumber, seconds=60):
         
-        msg = 'WAVE {} FIRED {}/{} SCORE {}'.format(wavenumber, fired, maxballs, self.score)
+        msg = 'WAVE {} ::: FIRED {}/{} ::: SCORE {} ::: {}'.format(wavenumber, fired, maxballs, self.score, seconds)
         textsurf = myfont.render(msg, 0, COLOUR_RED)
         textsurf.set_alpha(160)
         screen.blit(textsurf, (20,20))
@@ -581,6 +582,9 @@ class Game():
 
     def __init__(self):
         
+        self.gamestate = GAME_STATE_INTRO
+        self.wave_start_tick = 0
+        self.wave_seconds = 60
         self.wave_number = 0
         self.maxballs = 50
         self.shots_fired = 0
@@ -605,7 +609,7 @@ class Game():
         # ie how draggy the surface is. ice = 0.01 tarmac = 0.9
         # i could vary c according to the position of the ball
         c = 1.2
-        v = ball.velocity.getCopy() # we are a copy of the ball velocity
+        v = ball.vel.getCopy() # we are a copy of the ball velocity
         v.mult(-1) # this reverses the direction of force
         v.normalise()
         v.mult(c)
@@ -614,7 +618,7 @@ class Game():
     
     def getDrag(self, ball):
         
-        c = 0.01
+        c = 0.012
         speed = ball.vel.mag()
         dragMag = c * speed * speed
         drag = ball.vel.getCopy()
@@ -633,17 +637,28 @@ class Game():
         
     def startGame(self):
         
+        self.wave_number = 0
+        self.shots_fired_total = 0
+        self.scoreboard.reset()
+        self.reload()
+        self.psc.killAll()
+        
         self.bases = []
-        for x in range(0,4):
-            b = Base(300 + x * 150, 580, 50, 10)
+        for x in range(0, 3):
+            b = Base(400 + x * 150, 580, 50, 10)
             self.bases.append(b)
+            
+        self.spawnWave()
 
     def spawnWave(self):
+        
+        self.wave_start_tick = pygame.time.get_ticks() 
+        self.wave_seconds = MAX_WAVE_TIME
         
         self.wave_number += 1
         
         self.targets = []
-        for x in range(0, self.wave_number * 2):
+        for x in range(0, self.wave_number):
             t = Target(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 12, 30)
             self.targets.append(t)
 
@@ -654,10 +669,18 @@ class Game():
             
         self.bombers = []
         for x in range(0, min(self.wave_number, MAX_BOMBERS)):
-            b = Bomber(random.randint(300, 800), 0, 24, 12, 0.2 + (random.random() * 0.2))
+            b = Bomber(random.randint(300, 800), 0, 12, 6, 0.4 + (random.random() * 0.4))
             self.bombers.append(b)
 
     def checkCollisions(self):
+        
+        for ball in self.balls:
+            for base in self.bases:
+                if ball.rect.colliderect(base.rect):
+                    base.dead = True
+                    ball.dead = True
+                    self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 2, 100)
+                    sound_base_boom.play()
         
         for bomber in self.bombers:
             for base in self.bases:
@@ -665,7 +688,7 @@ class Game():
                     base.dead = True
                     bomber.dead = True
                     self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
-                    sound_big_boom.play()
+                    sound_base_boom.play()
                     
         for bomber in self.bombers:
             for ball in self.balls:
@@ -721,58 +744,97 @@ class Game():
             self.shots_fired += 1
         else:
             sound_dryfire.play()
+
+    def switchGamestate(self):
         
+        if self.gamestate == GAME_STATE_INTRO or self.gamestate == GAME_STATE_OVER:
+            self.startGame()
+            self.gamestate = GAME_STATE_IN_PROGRESS
+      
+    def drawIntroScreen(self):
+        
+        textsurf = myfonttitle.render('CANNON', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,20))
+        textsurf = myfont.render('press spacebar to start !', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,200))
+        
+    def drawGameOver(self):
+        
+        textsurf = myfonttitle.render('YOU IS DEDZ !!!', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,20))
+        textsurf = myfont.render('press spacebar for nuvver game !', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,200))
             
     def draw(self, mousex, mousey):
         
-        self.reticule.update(mousex, mousey)
-        self.reticule.draw()
+        if self.gamestate == GAME_STATE_INTRO:
+            
+            self.drawIntroScreen()
+            
+        elif self.gamestate == GAME_STATE_IN_PROGRESS:
+            
+            self.wave_seconds = MAX_WAVE_TIME - (pygame.time.get_ticks()-self.wave_start_tick) // 1000
+            
+            self.reticule.update(mousex, mousey)
+            self.reticule.draw()
+            
+            self.scoreboard.update()
+            self.scoreboard.draw(self.shots_fired, self.maxballs, self.wave_number, self.wave_seconds)
+            
+            self.starfield.update()
+            self.starfield.draw()
+    
+            self.cannon.update()
+            self.cannon.draw()
+            
+            self.psc.update()
+            
+            for ball in self.balls:
+                if ball.isflying:
+                    ball.applyForce(self.gravity)
+                    ball.applyForce(self.getDrag(ball))
+                ball.update()
+                
+            for target in self.targets:
+                target.update()
+                
+            for blocker in self.blockers:
+                blocker.update()
+                
+            for bomber in self.bombers:
+                bomber.update()
+                
+            for base in self.bases:
+                base.update()
+                
+            self.checkCollisions()
+            
+            for target in self.targets:
+                target.draw()
+                
+            for blocker in self.blockers:
+                blocker.draw()
+                
+            for bomber in self.bombers:
+                bomber.draw()
+                
+            for ball in self.balls:
+                ball.draw()
+                
+            for base in self.bases:
+                base.draw()
         
-        self.scoreboard.update()
-        self.scoreboard.draw(self.shots_fired, self.maxballs, self.wave_number)
-        
-        self.starfield.update()
-        self.starfield.draw()
-
-        self.cannon.update()
-        self.cannon.draw()
-        
-        self.psc.update()
-        
-        for ball in self.balls:
-            if ball.isflying:
-                ball.applyForce(self.gravity)
-                ball.applyForce(self.getDrag(ball))
-            ball.update()
+        elif self.gamestate == GAME_STATE_WAVE_OVER:
             
-        for target in self.targets:
-            target.update()
+            pass
             
-        for blocker in self.blockers:
-            blocker.update()
+        elif self.gamestate == GAME_STATE_OVER:
             
-        for bomber in self.bombers:
-            bomber.update()
-            
-        for base in self.bases:
-            base.update()
-            
-        self.checkCollisions()
-        
-        for target in self.targets:
-            target.draw()
-            
-        for blocker in self.blockers:
-            blocker.draw()
-            
-        for bomber in self.bombers:
-            bomber.draw()
-            
-        for ball in self.balls:
-            ball.draw()
-            
-        for base in self.bases:
-            base.draw()
+            self.drawGameOver()
             
         
         
@@ -782,9 +844,13 @@ class Game():
         
         while not done:
             
-            if len(self.targets) == 0:
-                self.spawnWave()
-                self.reload()
+            if len(self.bases) > 0:
+                if len(self.targets) == 0 or self.wave_seconds == 0:
+                    # wave is over
+                    self.spawnWave()
+                    self.reload()
+            else:
+                self.gamestate = GAME_STATE_OVER
             
             mousex, mousey = pygame.mouse.get_pos()
     
@@ -795,7 +861,7 @@ class Game():
                     if (event.key == pygame.K_ESCAPE):
                         done = True
                     elif (event.key == pygame.K_SPACE):
-                        pass
+                        game.switchGamestate()
                     elif (event.key == pygame.K_UP):
                         pass
                     elif (event.key == pygame.K_DOWN):
