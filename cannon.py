@@ -8,10 +8,12 @@ from vector import Vector2
 # constants to help code readability
 # ======================================================================
 
-GAME_STATE_INTRO       = 0
-GAME_STATE_IN_PROGRESS = 1
-GAME_STATE_WAVE_OVER   = 2
-GAME_STATE_OVER        = 3
+FPS = 60
+GAME_STATE_INTRO          = 0
+GAME_STATE_IN_PROGRESS    = 1
+GAME_STATE_WAVE_OVER      = 2
+GAME_STATE_LAST_BASE_LOST = 3
+GAME_STATE_OVER           = 4
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 600
 ORIGINX = SCREEN_WIDTH // 2
@@ -118,31 +120,38 @@ class ParticleSystem():
         
         self.particles = []
         
-    def burstDirection(self, angle, spread):
+    def burstDirection(self, angle, spread, colour):
         
         self.killAll()
         for n in range(0, self.max_particles):
+            if colour is None:
+                c = [random.randint(0,255), random.randint(0,255), random.randint(0,255)]
+            else:
+                c = colour
             # vary the angle a little bit
             angle = (angle + random.uniform(-spread, spread)) % 360
             speed = random.uniform(0.1, 0.7)
             size = random.randint(1, 10)
-            p = Partical(self.pos, angle, speed, size, COLOUR_YELLOW)
+            p = Partical(self.pos, angle, speed, size, c)
             self.particles.append(p)
             
-    def burstCircle(self):
+    def burstCircle(self, colour):
         
         self.killAll()
         step = 360 // self.max_particles
         for n in range(0, self.max_particles):
+            if colour is None:
+                c = [random.randint(0,255), random.randint(0,255), random.randint(0,255)]
+            else:
+                c = colour
+                
             angle = n * step
             speed = random.uniform(0.1, 0.7)
             size = random.randint(1, 14)
             if size < 5 and random.random() > 0.6:
-                colour = COLOUR_WHITE
-            else:
-                colour = COLOUR_RED
+                c = COLOUR_WHITE
             
-            p = Partical(self.pos, angle, speed, size, colour)
+            p = Partical(self.pos, angle, speed, size, c)
             self.particles.append(p)
             
     def update(self):
@@ -174,15 +183,15 @@ class ParticleSystemController():
         self.systems.append(system)
         return system
         
-    def spawnBurstDirection(self, x, y, angle, spread, max_particles = 20):
+    def spawnBurstDirection(self, x, y, angle, spread, max_particles = 20, colour=None):
         
         system = self.spawn(x, y, max_particles)
-        system.burstDirection(angle, spread)
+        system.burstDirection(angle, spread, colour)
         
-    def spawnBurstCircle(self, x, y, max_particles = 20):
+    def spawnBurstCircle(self, x, y, max_particles = 20, colour=None):
         
         system = self.spawn(x, y, max_particles)
-        system.burstCircle()
+        system.burstCircle(colour)
         
     def killAll(self):
         
@@ -272,8 +281,8 @@ class Cannonball():
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.acc = Vector2(0, 0)
-        self.size = 8
-        self.mass = 30
+        self.size = 10
+        self.mass = 20
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
         self.image.fill(COLOUR_YELLOW)
@@ -583,6 +592,7 @@ class Game():
     def __init__(self):
         
         self.gamestate = GAME_STATE_INTRO
+        self.gamestate_delay = 0
         self.wave_start_tick = 0
         self.wave_seconds = 60
         self.wave_number = 0
@@ -594,11 +604,11 @@ class Game():
         self.starfield = StarField()
         self.psc = ParticleSystemController()
         self.scoreboard = Scoreboard()
-        self.balls = []
-        self.bases = []
-        self.targets = []
+        self.balls    = []
+        self.bases    = []
+        self.targets  = []
         self.blockers = []
-        self.bombers = []
+        self.bombers  = []
         
         self.gravity = Vector2(0,0.3)
         self.startGame()
@@ -615,7 +625,6 @@ class Game():
         v.mult(c)
         return v
     
-    
     def getDrag(self, ball):
         
         c = 0.012
@@ -627,7 +636,6 @@ class Game():
         drag.mult(dragMag)
         return drag
         
-
     def reload(self):
         
         self.shots_fired_total += self.shots_fired
@@ -640,7 +648,6 @@ class Game():
         self.wave_number = 0
         self.shots_fired_total = 0
         self.scoreboard.reset()
-        self.reload()
         self.psc.killAll()
         
         self.bases = []
@@ -652,9 +659,9 @@ class Game():
 
     def spawnWave(self):
         
+        self.reload()
         self.wave_start_tick = pygame.time.get_ticks() 
         self.wave_seconds = MAX_WAVE_TIME
-        
         self.wave_number += 1
         
         self.targets = []
@@ -696,7 +703,7 @@ class Game():
                     bomber.dead = True
                     ball.dead = True
                     self.scoreboard.add(1000)
-                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
+                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 50, COLOUR_YELLOW)
                     sound_big_boom.play()
                     
         for blocker in self.blockers:
@@ -709,7 +716,6 @@ class Game():
                     ball.vel.x = -ball.vel.x
                     sound_blocker.play()
  
-        
         for target in self.targets:
             for ball in self.balls:
                 if not target.isDead() and target.rect.colliderect(ball.rect):
@@ -717,7 +723,7 @@ class Game():
                     ball.dead = True
                     self.scoreboard.add(250)
                     boomsize = random.randint(5, 50)
-                    self.psc.spawnBurstCircle(target.pos.x, target.pos.y, boomsize)
+                    self.psc.spawnBurstCircle(target.pos.x, target.pos.y, boomsize, COLOUR_RED)
                     if boomsize > 35:
                         sound_big_boom.play()
                     else:
@@ -760,14 +766,26 @@ class Game():
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,200))
         
+    def drawLastBaseLost(self):
+        
+        self.gamestate_delay += 1
+        if self.gamestate_delay > FPS * 4:
+            self.gamestate = GAME_STATE_OVER
+            self.gamestate_delay = 0
+        
     def drawGameOver(self):
         
         textsurf = myfonttitle.render('YOU IS DEDZ !!!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
-        textsurf = myfont.render('press spacebar for nuvver game !', 0, COLOUR_RED)
+        
+        textsurf = myfont.render('You Scored ::: {}'.format(self.scoreboard.score), 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,200))
+        
+        textsurf = myfont.render('press spacebar to play again !', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,400))
             
     def draw(self, mousex, mousey):
         
@@ -832,6 +850,11 @@ class Game():
             
             pass
             
+        elif self.gamestate == GAME_STATE_LAST_BASE_LOST:
+            
+            self.psc.update()
+            self.drawLastBaseLost()            
+            
         elif self.gamestate == GAME_STATE_OVER:
             
             self.drawGameOver()
@@ -846,11 +869,10 @@ class Game():
             
             if len(self.bases) > 0:
                 if len(self.targets) == 0 or self.wave_seconds == 0:
-                    # wave is over
                     self.spawnWave()
-                    self.reload()
             else:
-                self.gamestate = GAME_STATE_OVER
+                if self.gamestate == GAME_STATE_IN_PROGRESS:
+                    self.gamestate = GAME_STATE_LAST_BASE_LOST
             
             mousex, mousey = pygame.mouse.get_pos()
     
@@ -884,7 +906,7 @@ class Game():
                         
             screen.fill(COLOUR_BLACK)
             game.draw(mousex, mousey)
-            clock.tick(60)
+            clock.tick(FPS)
             pygame.display.flip()
         
 game = Game()
