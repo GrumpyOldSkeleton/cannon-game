@@ -2,13 +2,16 @@ import pygame
 import math
 import random
 import pathlib
+import pickle
 from vector import Vector2
+
   
 # ======================================================================
 # constants to help code readability
 # ======================================================================
 
-FPS = 60
+GAME_MODE_LIVE            = 0
+GAME_MODE_REPLAY          = 1
 GAME_STATE_INTRO          = 0
 GAME_STATE_IN_PROGRESS    = 1
 GAME_STATE_WAVE_OVER      = 2
@@ -18,16 +21,16 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 600
 ORIGINX = SCREEN_WIDTH // 2
 ORIGINY = SCREEN_HEIGHT // 2
-COLOUR_BLACK   = [0,0,0]
-COLOUR_WHITE   = [255,255,255]
-COLOUR_STARS   = [100,50,255]
-COLOUR_YELLOW  = [255,255,0]
-COLOUR_RED     = [255,0,0]
-COLOUR_BLOCKER = [255,0,255]
-COLOUR_BOMBER_ON = [255,255,0]
+COLOUR_BLACK      = [0,0,0]
+COLOUR_WHITE      = [255,255,255]
+COLOUR_STARS      = [100,50,255]
+COLOUR_YELLOW     = [255,255,0]
+COLOUR_RED        = [255,0,0]
+COLOUR_BLOCKER    = [255,0,255]
+COLOUR_BOMBER_ON  = [255,255,0]
 COLOUR_BOMBER_OFF = [200,0,0]
 COLOUR_BASE       = [255,255,0]
-MAX_BOMBERS = 10
+MAX_BOMBERS = 20
 MAX_BLOCKERS = 8
 MAX_WAVE_TIME = 60 # length of wave in seconds
 
@@ -36,6 +39,7 @@ MAX_WAVE_TIME = 60 # length of wave in seconds
 # ======================================================================
 # set mixer to 512 value to stop buffering causing sound delay
 # this must be called before anything else using mixer.pre_init()
+
 pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 pygame.mixer.init()
@@ -43,7 +47,6 @@ pygame.display.set_caption("Cannon")
 pygame.mouse.set_visible(False)
 screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 clock = pygame.time.Clock()
-
 
 # ======================================================================
 # load images and sounds
@@ -57,7 +60,7 @@ sound_dryfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'dryfire.og
 sound_blocker   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'blocker.ogg')))
 sound_base_boom = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'base_explode.ogg')))
 
-myfont   = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 20)
+myfont   = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 30)
 myfont10 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 10)
 myfonttitle = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 80)
 
@@ -89,7 +92,7 @@ class Partical():
         self.image.set_alpha(self.alpha)
         
         # gravity hack
-        self.vel.y += 0.3
+        self.vel.y += 0.2
         
     def draw(self):
         
@@ -281,11 +284,11 @@ class Cannonball():
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.acc = Vector2(0, 0)
-        self.size = 10
+        self.size = 8
         self.mass = 20
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
-        self.image.fill(COLOUR_YELLOW)
+        self.image.fill(COLOUR_WHITE)
         self.isflying = False
         self.dead = False
         
@@ -375,7 +378,7 @@ class Target():
     def __init__(self, x, y, w, h):
         
         self.pos = Vector2(x, y)
-        self.vel = Vector2(-1 + random.random() * -1.5, 0)
+        self.vel = Vector2(-0.5 + random.random() * -1.5, 0)
         self.width = w
         self.height = h
         self.rect = pygame.Rect(x, y, self.width, self.height)
@@ -388,7 +391,7 @@ class Target():
         return self.dead == True
         
     def update(self):
-        
+                
         self.pos.add(self.vel)
         if self.pos.x < 0:
             self.pos.x = SCREEN_WIDTH
@@ -453,12 +456,17 @@ class Bomber():
         self.lastflash = 0
         self.thisframe = 0
         self.flash = False
+        self.angle = random.randint(0,360)
         
     def isDead(self):
         
         return self.dead == True
         
     def update(self):
+        
+        self.angle += 1
+        if self.angle > 360:
+            self.angle = 0
         
         self.thisframe += 1
         if self.thisframe - self.lastflash > 10:
@@ -473,7 +481,10 @@ class Bomber():
         self.pos.add(self.vel)
         self.dead = self.pos.y > SCREEN_HEIGHT
         
-        self.rect.x = self.pos.x
+        offset = math.cos(math.radians(self.angle))
+        self.pos.x += offset
+        
+        self.rect.x = self.pos.x 
         self.rect.y = self.pos.y
         
     def draw(self):
@@ -525,6 +536,14 @@ class Scoreboard():
         
         self.score = 0
         self.targetscore = 0 # lerp to this
+        self.needTableUpdate = True
+        
+        try:
+            self.highscores = pickle.load(open("highscores.pkl", "rb"))
+        except:
+            self.highscores = [i * 250 for i in range(0, 10)]
+            
+        self.highscores.sort(reverse=True)
         
     def add(self, n):
         
@@ -534,6 +553,51 @@ class Scoreboard():
         
         self.score = 0
         self.targetscore = 0
+        self.needTableUpdate = True
+        
+    def finish(self):
+        
+        # in case the lerping didn't get time to finish
+        self.score = self.targetscore
+        
+        if self.needTableUpdate:
+            if self.score > min(self.highscores):
+                self.highscores.append(self.score)
+                self.highscores.sort(reverse=True)
+                self.highscores.pop()
+                self.save()
+                self.needTableUpdate = False
+    
+    def drawHighScoreTable(self):
+            
+        alpha = 200
+        xoff = 760
+        yoff = 40
+        highlight_done = False
+        
+        textsurf = myfont.render('HIGHSCORES.', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (xoff,yoff))
+        
+        yoff += 40
+        
+        for i, line in enumerate(self.highscores):
+            
+            alpha -= 14
+            msg = '{:02d} ... {}'.format(i+1, line)
+            textsurf = myfont.render(msg, 0, COLOUR_RED)
+            
+            if line == self.score and not highlight_done:
+                textsurf.set_alpha(255)
+                highlight_done = True
+            else:
+                textsurf.set_alpha(alpha)
+                
+            screen.blit(textsurf, (xoff, yoff + (i * 40)))
+        
+    def save(self):
+        
+        pickle.dump(self.highscores, open( "highscores.pkl", "wb" ))
         
     def update(self):
         
@@ -544,14 +608,12 @@ class Scoreboard():
     
         return math.ceil(((mx - mn) * norm + mn))
         
-    def draw(self, fired, maxballs, wavenumber, seconds=60):
+    def draw(self, fired, maxballs, wavenumber, seconds):
         
         msg = 'WAVE {} ::: FIRED {}/{} ::: SCORE {} ::: {}'.format(wavenumber, fired, maxballs, self.score, seconds)
         textsurf = myfont.render(msg, 0, COLOUR_RED)
         textsurf.set_alpha(160)
-        screen.blit(textsurf, (20,20))
-        
-
+        screen.blit(textsurf, (40,20))
 
 # ======================================================================
 # reticule/crosshair class
@@ -576,7 +638,9 @@ class Reticule():
         
     def draw(self):
         
-        pygame.draw.rect(screen,[255,255,255],[self.pos.x,self.pos.y, 4, 4])
+        pygame.draw.rect(screen,[255,255,255],[self.pos.x,self.pos.y, 2, 2])
+        pygame.draw.rect(screen,[200,200,200],[self.pos.x-9,self.pos.y-9, 20, 20], 1)
+        pygame.draw.line(screen, [0,0,100], [10,550], [self.pos.x,self.pos.y], 2)
         
         msg = '{}/{}'.format(self.pos.x + self.xoff, self.pos.y)
         text = myfont10.render(msg, 0, COLOUR_RED)
@@ -591,40 +655,41 @@ class Game():
 
     def __init__(self):
         
-        self.gamestate = GAME_STATE_INTRO
-        self.gamestate_delay = 0
-        self.wave_start_tick = 0
-        self.wave_seconds = 60
-        self.wave_number = 0
-        self.maxballs = 50
-        self.shots_fired = 0
+        self.gamemode          = GAME_MODE_LIVE
+        self.gamestate         = GAME_STATE_INTRO
+        self.slowmotion        = False
+        self.fps               = 60
+        self.replay_length     = 0
+        self.gamestate_delay   = 0
+        self.current_tick      = 0
+        self.wave_start_tick   = 0
+        self.wave_seconds      = 60
+        self.wave_number       = 0
+        self.maxballs          = 50
+        self.shots_fired       = 0
         self.shots_fired_total = 0
-        self.cannon = Cannon(10,550)
-        self.reticule = Reticule()
-        self.starfield = StarField()
-        self.psc = ParticleSystemController()
+        
+        self.cannon     = Cannon(10,550)
+        self.reticule   = Reticule()
+        self.starfield  = StarField()
+        self.psc        = ParticleSystemController()
         self.scoreboard = Scoreboard()
-        self.balls    = []
-        self.bases    = []
-        self.targets  = []
-        self.blockers = []
-        self.bombers  = []
+        
+        self.balls     = []
+        self.bases     = []
+        self.targets   = []
+        self.blockers  = []
+        self.bombers   = []
+        self.recording = []
         
         self.gravity = Vector2(0,0.3)
+        
         self.startGame()
 
-    def getFriction(self, ball):
+    def toggleSlowMotion(self):
         
-        # c is the coefficient of drag
-        # ie how draggy the surface is. ice = 0.01 tarmac = 0.9
-        # i could vary c according to the position of the ball
-        c = 1.2
-        v = ball.vel.getCopy() # we are a copy of the ball velocity
-        v.mult(-1) # this reverses the direction of force
-        v.normalise()
-        v.mult(c)
-        return v
-    
+        self.slowmotion = not self.slowmotion
+
     def getDrag(self, ball):
         
         c = 0.012
@@ -642,8 +707,18 @@ class Game():
         self.shots_fired = 0
         self.balls = [Cannonball(self.cannon.pos.x, self.cannon.pos.y) for i in range(0, self.maxballs)]
         self.cannon.load(self.balls)
+       
+    def startReplay(self):
+        
+        self.gamemode = GAME_MODE_REPLAY
+        self.replay_length = len(self.recording)
+        self.startGame()
+        self.gamestate = GAME_STATE_IN_PROGRESS   
         
     def startGame(self):
+        
+        self.thisframe = 0
+        self.current_tick = 0
         
         self.wave_number = 0
         self.shots_fired_total = 0
@@ -651,32 +726,36 @@ class Game():
         self.psc.killAll()
         
         self.bases = []
-        for x in range(0, 3):
-            b = Base(400 + x * 150, 580, 50, 10)
+        for x in range(0, 2):
+            b = Base(400 + x * 300, 580, 150, 10)
+            self.bases.append(b)
+        for y in range(0, 2):
+            b = Base(10, 20 + y * 200, 10, 150)
             self.bases.append(b)
             
         self.spawnWave()
 
     def spawnWave(self):
         
+        random.seed(1)
         self.reload()
-        self.wave_start_tick = pygame.time.get_ticks() 
+        self.wave_start_tick = self.current_tick
         self.wave_seconds = MAX_WAVE_TIME
         self.wave_number += 1
         
         self.targets = []
         for x in range(0, self.wave_number):
-            t = Target(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 12, 30)
+            t = Target(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 20, 40)
             self.targets.append(t)
 
         self.blockers = []
         for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
-            b = Blocker(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 3, 40)
+            b = Blocker(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 3, 20)
             self.blockers.append(b)
             
         self.bombers = []
         for x in range(0, min(self.wave_number, MAX_BOMBERS)):
-            b = Bomber(random.randint(300, 800), 0, 12, 6, 0.4 + (random.random() * 0.4))
+            b = Bomber(random.randint(200, SCREEN_WIDTH-100), 0, 24, 12, 0.1 + (random.random() * 0.5))
             self.bombers.append(b)
 
     def checkCollisions(self):
@@ -687,6 +766,14 @@ class Game():
                     base.dead = True
                     ball.dead = True
                     self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 2, 100)
+                    sound_base_boom.play()
+                    
+        for target in self.targets:
+            for base in self.bases:
+                if target.rect.colliderect(base.rect):
+                    base.dead = True
+                    target.dead = True
+                    self.psc.spawnBurstCircle(target.pos.x, target.pos.y, 50, COLOUR_YELLOW)
                     sound_base_boom.play()
         
         for bomber in self.bombers:
@@ -741,7 +828,6 @@ class Game():
         ba = [b for b in self.bases if not b.isDead()]
         self.bases = ba
         
-            
     def fireCannon(self, mx, my):
         
         if self.shots_fired < self.maxballs:
@@ -756,38 +842,45 @@ class Game():
         if self.gamestate == GAME_STATE_INTRO or self.gamestate == GAME_STATE_OVER:
             self.startGame()
             self.gamestate = GAME_STATE_IN_PROGRESS
-      
+            
     def drawIntroScreen(self):
         
         textsurf = myfonttitle.render('CANNON', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
-        textsurf = myfont.render('press spacebar to start !', 0, COLOUR_RED)
+        textsurf = myfont.render('press spacebar!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
-        screen.blit(textsurf, (20,200))
+        screen.blit(textsurf, (20,540))
+        self.scoreboard.drawHighScoreTable()
         
     def drawLastBaseLost(self):
         
         self.gamestate_delay += 1
-        if self.gamestate_delay > FPS * 4:
+        if self.gamestate_delay > self.fps * 4:
             self.gamestate = GAME_STATE_OVER
             self.gamestate_delay = 0
         
     def drawGameOver(self):
         
-        textsurf = myfonttitle.render('YOU IS DEDZ !!!', 0, COLOUR_RED)
+        textsurf = myfonttitle.render('DEDZ !!!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
         
-        textsurf = myfont.render('You Scored ::: {}'.format(self.scoreboard.score), 0, COLOUR_RED)
+        textsurf = myfont.render('You Scored...{}'.format(self.scoreboard.score), 0, COLOUR_RED)
         textsurf.set_alpha(255)
-        screen.blit(textsurf, (20,200))
+        screen.blit(textsurf, (20,160))
         
-        textsurf = myfont.render('press spacebar to play again !', 0, COLOUR_RED)
+        textsurf = myfont.render('R = View Replay.', 0, COLOUR_RED)
         textsurf.set_alpha(255)
-        screen.blit(textsurf, (20,400))
+        screen.blit(textsurf, (20, 480))
+        
+        textsurf = myfont.render('Spacebar = Play Again.', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20, 540))
+        
+        self.scoreboard.drawHighScoreTable()
             
-    def draw(self, mousex, mousey):
+    def draw(self, mousex, mousey, click):
         
         if self.gamestate == GAME_STATE_INTRO:
             
@@ -795,7 +888,9 @@ class Game():
             
         elif self.gamestate == GAME_STATE_IN_PROGRESS:
             
-            self.wave_seconds = MAX_WAVE_TIME - (pygame.time.get_ticks()-self.wave_start_tick) // 1000
+            self.current_tick += 1
+            
+            self.wave_seconds = MAX_WAVE_TIME - (self.current_tick - self.wave_start_tick) // 60
             
             self.reticule.update(mousex, mousey)
             self.reticule.draw()
@@ -806,6 +901,9 @@ class Game():
             self.starfield.update()
             self.starfield.draw()
     
+            if click:
+                self.fireCannon(mousex, mousey)
+                
             self.cannon.update()
             self.cannon.draw()
             
@@ -858,14 +956,16 @@ class Game():
         elif self.gamestate == GAME_STATE_OVER:
             
             self.drawGameOver()
+            self.scoreboard.finish()         
             
-        
-        
     def run(self):
         
         done = False
         
         while not done:
+            
+            if self.slowmotion:
+                pygame.time.wait(50)
             
             if len(self.bases) > 0:
                 if len(self.targets) == 0 or self.wave_seconds == 0:
@@ -874,39 +974,41 @@ class Game():
                 if self.gamestate == GAME_STATE_IN_PROGRESS:
                     self.gamestate = GAME_STATE_LAST_BASE_LOST
             
-            mousex, mousey = pygame.mouse.get_pos()
+            if self.gamemode == GAME_MODE_LIVE:
+                mousex, mousey = pygame.mouse.get_pos()
+                
+            click = False
     
             for event in pygame.event.get(): 
                 if event.type == pygame.QUIT:  
                     done = True
+                    
                 if event.type == pygame.KEYDOWN:
                     if (event.key == pygame.K_ESCAPE):
                         done = True
                     elif (event.key == pygame.K_SPACE):
                         game.switchGamestate()
-                    elif (event.key == pygame.K_UP):
-                        pass
-                    elif (event.key == pygame.K_DOWN):
-                        pass
-                        
+                    elif (event.key == pygame.K_r):
+                        self.startReplay()
+                    elif (event.key == pygame.K_s):
+                        self.toggleSlowMotion()                        
+
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    
                     if event.button == 1: # left click
-                        self.fireCannon(mousex, mousey)
-                    
-                    if event.button == 4: # scroll wheel up 
+                        click = True
                         
-                        self.reticule.microUpdate(-1)
-                        print('scroll up adjust aim tiny bit up')
-                        
-                    if event.button == 5: # scroll wheel down
-                        
-                        self.reticule.microUpdate(1)
-                        print('scroll down') 
-                        
+            if self.gamestate == GAME_STATE_IN_PROGRESS:
+                if self.gamemode == GAME_MODE_LIVE: 
+                    self.recording.append( (mousex, mousey, click) )
+                else:
+                    # game is showing a replay of last game
+                    if self.thisframe < self.replay_length:
+                        mousex, mousey, click = self.recording[self.thisframe]
+                        self.thisframe += 1
+                
             screen.fill(COLOUR_BLACK)
-            game.draw(mousex, mousey)
-            clock.tick(FPS)
+            game.draw(mousex, mousey, click)
+            clock.tick(self.fps)
             pygame.display.flip()
         
 game = Game()
