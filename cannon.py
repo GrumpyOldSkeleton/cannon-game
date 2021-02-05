@@ -30,9 +30,17 @@ COLOUR_BLOCKER    = [255,0,255]
 COLOUR_BOMBER_ON  = [255,255,0]
 COLOUR_BOMBER_OFF = [200,0,0]
 COLOUR_BASE       = [255,255,0]
-MAX_BOMBERS = 20
-MAX_BLOCKERS = 8
+COLOUR_BRUTE      = [200,0,255]
+# wave limits
+MAX_BOMBERS   = 10
+MAX_BLOCKERS  = 8
+MAX_BRUTES    = 2
 MAX_WAVE_TIME = 60 # length of wave in seconds
+# scores
+SCORE_TARGET_HIT  = 250
+SCORE_BOMBER_HIT  = 500
+SCORE_BRUTE_HIT   = 1000
+SCORE_BLOCKER_HIT = -250
 
 # ======================================================================
 # setup pygame
@@ -60,9 +68,56 @@ sound_dryfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'dryfire.og
 sound_blocker   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'blocker.ogg')))
 sound_base_boom = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'base_explode.ogg')))
 
-myfont   = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 30)
 myfont10 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 10)
-myfonttitle = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 80)
+myfont20 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 20)
+myfont30 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 30)
+myfont80 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 80)
+
+SCOREFONT_TARGET_HIT  = myfont20.render(str(SCORE_TARGET_HIT) , 0, COLOUR_YELLOW)
+SCOREFONT_BOMBER_HIT  = myfont20.render(str(SCORE_BOMBER_HIT) , 0, COLOUR_YELLOW)
+SCOREFONT_BRUTE_HIT   = myfont20.render(str(SCORE_BRUTE_HIT)  , 0, COLOUR_YELLOW)
+SCOREFONT_BLOCKER_HIT = myfont20.render(str(SCORE_BLOCKER_HIT), 0, COLOUR_RED)
+
+#=======================================================================
+# Score Partical class
+#=======================================================================
+
+class ScorePartical():
+    
+    def __init__(self, pos, angle, speed, image):
+        
+        self.pos = Vector2(pos.x, pos.y)
+        self.vel = Vector2(0, 0)
+        self.acc = Vector2(0,0)     
+        self.alpha = 255   
+        self.acc.setFromAngle(angle)
+        self.acc.mult(speed)
+        self.image = image
+        self.image.set_alpha(self.alpha)
+        
+    def update(self):
+        
+        self.vel.add(self.acc)
+        self.pos.add(self.vel)
+        self.alpha -= abs(self.vel.y)
+        self.alpha = max(0,self.alpha)
+        self.image.set_alpha(self.alpha)
+        
+        # gravity hack
+        self.vel.y += 0.5
+        
+    def draw(self):
+        
+        screen.blit(self.image, (self.pos.x, self.pos.y))
+        
+    def isOffScreen(self):
+        
+        return (self.pos.x < 0) or (self.pos.x > SCREEN_WIDTH) or (self.pos.y < 0) or (self.pos.y > SCREEN_HEIGHT)
+        
+    def isDead(self):
+        
+        return (self.alpha <= 0) or (self.isOffScreen())
+
 
 #=======================================================================
 # Partical class
@@ -156,6 +211,17 @@ class ParticleSystem():
             
             p = Partical(self.pos, angle, speed, size, c)
             self.particles.append(p)
+    
+        
+    def scoreBurst(self, scoreimage):
+        
+        self.killAll()
+        step = 360 // self.max_particles
+        for n in range(0, self.max_particles):
+            angle = n * step
+            speed = 0.5
+            p = ScorePartical(self.pos, angle, speed, scoreimage)
+            self.particles.append(p)
             
     def update(self):
         
@@ -195,6 +261,11 @@ class ParticleSystemController():
         
         system = self.spawn(x, y, max_particles)
         system.burstCircle(colour)
+        
+    def spawnScoreBurst(self, x, y, scoreimage):
+        
+        system = self.spawn(x, y, 3)
+        system.scoreBurst(scoreimage)
         
     def killAll(self):
         
@@ -491,7 +562,61 @@ class Bomber():
         
         screen.blit(self.image, self.rect)
         
-      
+# ======================================================================
+# brute class
+# ======================================================================
+
+class Brute():
+
+    def __init__(self, x, y, tx, ty):
+        
+        self.pos    = Vector2(x, y)
+        self.vel    = Vector2(0, 0)
+        self.width  = 20
+        self.height = 20
+        self.rect   = pygame.Rect(x, y, self.width, self.height)
+        self.image  = pygame.Surface([self.width, self.height])
+        self.dead   = False
+        self.angle  = random.randint(0,360)
+        self.radius = 1
+        self.radius_step = 0.1
+        self.image.fill(COLOUR_BRUTE)
+        
+        # get a vector to carry us to the target
+        tv = Vector2(tx,ty)
+        tv.sub(self.pos)
+        tv.normalise()
+        tv.mult(0.6)
+        self.vel.set(tv)
+        
+    def isDead(self):
+        
+        return self.dead == True
+        
+    def update(self):
+        
+        self.radius += self.radius_step
+        if self.radius < 0 or self.radius > 40:
+            self.radius_step = -self.radius_step
+        
+        self.angle += 1
+        if self.angle > 360:
+            self.angle = 0
+            
+        xoff = math.cos(math.radians(self.angle)) 
+        yoff = math.sin(math.radians(self.angle)) 
+        
+        self.pos.add(self.vel)
+        self.dead = self.pos.y > SCREEN_HEIGHT or self.pos.y < 0 or self.pos.x < 0 or self.pos.x > SCREEN_WIDTH
+
+        self.rect.x = self.pos.x + (xoff * self.radius)
+        self.rect.y = self.pos.y + (yoff * self.radius)
+        
+    def draw(self):
+        
+        screen.blit(self.image, self.rect)
+
+
 # ======================================================================
 # base class
 # ======================================================================
@@ -575,7 +700,7 @@ class Scoreboard():
         yoff = 40
         highlight_done = False
         
-        textsurf = myfont.render('HIGHSCORES.', 0, COLOUR_RED)
+        textsurf = myfont30.render('HIGHSCORES.', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (xoff,yoff))
         
@@ -585,7 +710,7 @@ class Scoreboard():
             
             alpha -= 14
             msg = '{:02d} ... {}'.format(i+1, line)
-            textsurf = myfont.render(msg, 0, COLOUR_RED)
+            textsurf = myfont30.render(msg, 0, COLOUR_RED)
             
             if line == self.score and not highlight_done:
                 textsurf.set_alpha(255)
@@ -601,7 +726,7 @@ class Scoreboard():
         
     def update(self):
         
-        if self.score < self.targetscore:
+        if self.score != self.targetscore:
             self.score = self.lerp(self.score, self.targetscore, 0.02)
         
     def lerp(self, mn, mx, norm):
@@ -611,7 +736,7 @@ class Scoreboard():
     def draw(self, fired, maxballs, wavenumber, seconds):
         
         msg = 'WAVE {} ::: FIRED {}/{} ::: SCORE {} ::: {}'.format(wavenumber, fired, maxballs, self.score, seconds)
-        textsurf = myfont.render(msg, 0, COLOUR_RED)
+        textsurf = myfont30.render(msg, 0, COLOUR_RED)
         textsurf.set_alpha(160)
         screen.blit(textsurf, (40,20))
 
@@ -641,11 +766,7 @@ class Reticule():
         pygame.draw.rect(screen,[255,255,255],[self.pos.x,self.pos.y, 2, 2])
         pygame.draw.rect(screen,[200,200,200],[self.pos.x-9,self.pos.y-9, 20, 20], 1)
         pygame.draw.line(screen, [0,0,100], [10,550], [self.pos.x,self.pos.y], 2)
-        
-        msg = '{}/{}'.format(self.pos.x + self.xoff, self.pos.y)
-        text = myfont10.render(msg, 0, COLOUR_RED)
-        text.set_alpha(150)
-        screen.blit(text, (self.pos.x + self.text_offset, self.pos.y + self.text_offset))
+
     
 # ======================================================================
 # game class
@@ -680,6 +801,7 @@ class Game():
         self.targets   = []
         self.blockers  = []
         self.bombers   = []
+        self.brutes    = []
         self.recording = []
         
         self.gravity = Vector2(0,0.3)
@@ -734,31 +856,72 @@ class Game():
             self.bases.append(b)
             
         self.spawnWave()
+        
+    def clearOldWave(self):
+        
+        self.targets  = []
+        self.blockers = []
+        self.bombers  = []
+        self.brutes   = []
 
     def spawnWave(self):
         
         random.seed(1)
+        self.clearOldWave()
         self.reload()
         self.wave_start_tick = self.current_tick
         self.wave_seconds = MAX_WAVE_TIME
         self.wave_number += 1
         
-        self.targets = []
         for x in range(0, self.wave_number):
-            t = Target(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 20, 40)
+            t = Target(random.randint(1000, 1800), random.randint(10, SCREEN_HEIGHT-100), 20, 40)
             self.targets.append(t)
 
-        self.blockers = []
         for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
-            b = Blocker(random.randint(1000, 1400), random.randint(10, SCREEN_HEIGHT-100), 3, 20)
+            b = Blocker(random.randint(1000, 1800), random.randint(10, SCREEN_HEIGHT-100), 3, 20)
             self.blockers.append(b)
             
-        self.bombers = []
         for x in range(0, min(self.wave_number, MAX_BOMBERS)):
             b = Bomber(random.randint(200, SCREEN_WIDTH-100), 0, 24, 12, 0.1 + (random.random() * 0.5))
             self.bombers.append(b)
+            
+        # if only 1 base remains, spawn a 'brute' that is hard to hit and moves directly towards the base
+        # this will stop the game from getting easy when only one base is left.
+        
+        if len(self.bases) == 1:
+            tx = self.bases[0].pos.x
+            ty = self.bases[0].pos.y
+            
+            for x in range(0, min(self.wave_number, MAX_BRUTES)):
+                b = Brute(random.randrange(SCREEN_WIDTH-600, SCREEN_WIDTH-50), random.randrange(100, 200), tx, ty)
+                self.brutes.append(b)
 
     def checkCollisions(self):
+
+        # idea:
+        # always do the outer loop being the one with likely the least amount.
+        # it will be more efficient.
+        # eg 40 balls in the air and no brutes, if balls on outer loop 40 loops are done and wasted
+        # if brutes were outer loop, no checks at all would be needed
+        
+        # do brute collisions
+        for brute in self.brutes:
+            for base in self.bases:
+                if brute.rect.colliderect(base.rect):
+                    brute.dead = True
+                    base.dead  = True
+                    self.psc.spawnBurstDirection(brute.pos.x, brute.pos.y, 270, 2, 50)
+                    sound_base_boom.play()
+        
+        for brute in self.brutes:
+            for ball in self.balls:
+                if brute.rect.colliderect(ball.rect):
+                    brute.dead = True
+                    ball.dead  = True
+                    self.scoreboard.add(SCORE_BRUTE_HIT)
+                    self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 2, 50)
+                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BRUTE_HIT)
+                    sound_big_boom.play()
         
         for ball in self.balls:
             for base in self.bases:
@@ -789,8 +952,9 @@ class Game():
                 if bomber.rect.colliderect(ball.rect):
                     bomber.dead = True
                     ball.dead = True
-                    self.scoreboard.add(1000)
-                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 50, COLOUR_YELLOW)
+                    self.scoreboard.add(SCORE_BOMBER_HIT)
+                    self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 20, 50, COLOUR_YELLOW)
+                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BOMBER_HIT)
                     sound_big_boom.play()
                     
         for blocker in self.blockers:
@@ -801,6 +965,8 @@ class Game():
                     else:
                         ball.pos.x += 4 # hit was from the right
                     ball.vel.x = -ball.vel.x
+                    self.scoreboard.add(SCORE_BLOCKER_HIT)
+                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BLOCKER_HIT)
                     sound_blocker.play()
  
         for target in self.targets:
@@ -808,10 +974,11 @@ class Game():
                 if not target.isDead() and target.rect.colliderect(ball.rect):
                     target.dead = True
                     ball.dead = True
-                    self.scoreboard.add(250)
-                    boomsize = random.randint(5, 50)
-                    self.psc.spawnBurstCircle(target.pos.x, target.pos.y, boomsize, COLOUR_RED)
-                    if boomsize > 35:
+                    self.scoreboard.add(SCORE_TARGET_HIT)
+                    boomsize = random.randint(5, 30)
+                    self.psc.spawnBurstCircle(ball.pos.x, ball.pos.y, boomsize, COLOUR_RED)
+                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_TARGET_HIT)
+                    if boomsize > 20:
                         sound_big_boom.play()
                     else:
                         sound_boom.play()
@@ -828,6 +995,9 @@ class Game():
         ba = [b for b in self.bases if not b.isDead()]
         self.bases = ba
         
+        br = [b for b in self.brutes if not b.isDead()]
+        self.brutes = br
+        
     def fireCannon(self, mx, my):
         
         if self.shots_fired < self.maxballs:
@@ -839,16 +1009,18 @@ class Game():
 
     def switchGamestate(self):
         
-        if self.gamestate == GAME_STATE_INTRO or self.gamestate == GAME_STATE_OVER:
+        # handles when spacebar is pressed
+        if self.gamestate in [GAME_STATE_INTRO, GAME_STATE_OVER] or self.gamemode == GAME_MODE_REPLAY:
+            self.gamemode = GAME_MODE_LIVE
             self.startGame()
             self.gamestate = GAME_STATE_IN_PROGRESS
             
     def drawIntroScreen(self):
         
-        textsurf = myfonttitle.render('CANNON', 0, COLOUR_RED)
+        textsurf = myfont80.render('CANNON', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
-        textsurf = myfont.render('press spacebar!', 0, COLOUR_RED)
+        textsurf = myfont30.render('press spacebar!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,540))
         self.scoreboard.drawHighScoreTable()
@@ -862,19 +1034,19 @@ class Game():
         
     def drawGameOver(self):
         
-        textsurf = myfonttitle.render('DEDZ !!!', 0, COLOUR_RED)
+        textsurf = myfont80.render('DEDZ !!!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
         
-        textsurf = myfont.render('You Scored...{}'.format(self.scoreboard.score), 0, COLOUR_RED)
+        textsurf = myfont30.render('You Scored...{}'.format(self.scoreboard.score), 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,160))
         
-        textsurf = myfont.render('R = View Replay.', 0, COLOUR_RED)
+        textsurf = myfont30.render('R = View Replay.', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20, 480))
         
-        textsurf = myfont.render('Spacebar = Play Again.', 0, COLOUR_RED)
+        textsurf = myfont30.render('Spacebar = Play Again.', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20, 540))
         
@@ -893,20 +1065,13 @@ class Game():
             self.wave_seconds = MAX_WAVE_TIME - (self.current_tick - self.wave_start_tick) // 60
             
             self.reticule.update(mousex, mousey)
-            self.reticule.draw()
             
-            self.scoreboard.update()
-            self.scoreboard.draw(self.shots_fired, self.maxballs, self.wave_number, self.wave_seconds)
-            
-            self.starfield.update()
-            self.starfield.draw()
-    
             if click:
                 self.fireCannon(mousex, mousey)
                 
+            self.scoreboard.update()
+            self.starfield.update()
             self.cannon.update()
-            self.cannon.draw()
-            
             self.psc.update()
             
             for ball in self.balls:
@@ -927,7 +1092,15 @@ class Game():
             for base in self.bases:
                 base.update()
                 
+            for brute in self.brutes:
+                brute.update()
+                
             self.checkCollisions()
+            
+            self.starfield.draw()
+            self.cannon.draw()
+            self.reticule.draw()
+            self.scoreboard.draw(self.shots_fired, self.maxballs, self.wave_number, self.wave_seconds)
             
             for target in self.targets:
                 target.draw()
@@ -937,6 +1110,9 @@ class Game():
                 
             for bomber in self.bombers:
                 bomber.draw()
+                
+            for brute in self.brutes:
+                brute.draw()
                 
             for ball in self.balls:
                 ball.draw()
@@ -991,7 +1167,7 @@ class Game():
                     elif (event.key == pygame.K_r):
                         self.startReplay()
                     elif (event.key == pygame.K_s):
-                        self.toggleSlowMotion()                        
+                        self.toggleSlowMotion()
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # left click
