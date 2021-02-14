@@ -10,7 +10,7 @@ from vector import Vector2
 # constants to help code readability
 # ======================================================================
 
-RANDOM_SEED               = 1
+RANDOM_SEED               = 3
 GAME_MODE_LIVE            = 0
 GAME_MODE_REPLAY          = 1
 GAME_STATE_INTRO          = 0
@@ -24,21 +24,62 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 600
 ORIGINX = SCREEN_WIDTH // 2
 ORIGINY = SCREEN_HEIGHT // 2
-COLOUR_BLACK      = [0,0,0]
-COLOUR_WHITE      = [255,255,255]
-COLOUR_STARS      = [100,50,255]
-COLOUR_YELLOW     = [255,255,0]
-COLOUR_RED        = [255,0,0]
-COLOUR_BLOCKER    = [255,0,255]
-COLOUR_BOMBER_ON  = [255,255,0]
-COLOUR_BOMBER_OFF = [200,0,0]
-COLOUR_BASE       = [255,255,0]
-COLOUR_BRUTE      = [200,0,255]
+
+COLOUR_BLACK      = (0, 0, 0)
+COLOUR_DARKBLUE   = (29, 43, 83)
+COLOUR_PURPLE     = (126, 37, 83)
+COLOUR_DARKGREEN  = (0, 135, 81)
+COLOUR_BROWN      = (171, 82, 54)
+COLOUR_DARKGREY   = (95, 87, 79)
+COLOUR_LIGHTGREY  = (194, 195, 199)
+COLOUR_WHITE      = (255, 241, 232)
+COLOUR_RED        = (255, 0, 77)
+COLOUR_ORANGE     = (255, 163, 0)
+COLOUR_YELLOW     = (255, 236, 39)
+COLOUR_GREEN      = (0, 228, 54)
+COLOUR_BLUE       = (41, 173, 255)
+COLOUR_LAVENDER   = (131, 118, 156)
+COLOUR_PINK       = (255, 119, 168)
+COLOUR_LIGHTPEACH = (255, 204, 170)
+
+IDX_COLOUR_BLACK      = 0
+IDX_COLOUR_DARKBLUE   = 1
+IDX_COLOUR_PURPLE     = 2
+IDX_COLOUR_DARKGREEN  = 3
+IDX_COLOUR_BROWN      = 4
+IDX_COLOUR_DARKGREY   = 5
+IDX_COLOUR_LIGHTGREY  = 6
+IDX_COLOUR_WHITE      = 7
+IDX_COLOUR_RED        = 8
+IDX_COLOUR_ORANGE     = 9
+IDX_COLOUR_YELLOW     = 10
+IDX_COLOUR_GREEN      = 11
+IDX_COLOUR_BLUE       = 12
+IDX_COLOUR_LAVENDER   = 13
+IDX_COLOUR_PINK       = 14
+IDX_COLOUR_LIGHTPEACH = 15
+
+COLOUR_PALETTE = [COLOUR_BLACK    ,
+                  COLOUR_DARKBLUE ,
+                  COLOUR_PURPLE   ,
+                  COLOUR_DARKGREEN,
+                  COLOUR_BROWN    ,
+                  COLOUR_DARKGREY ,
+                  COLOUR_LIGHTGREY,
+                  COLOUR_WHITE    ,
+                  COLOUR_RED      ,
+                  COLOUR_ORANGE   ,
+                  COLOUR_YELLOW   ,
+                  COLOUR_GREEN    ,
+                  COLOUR_BLUE     ,
+                  COLOUR_LAVENDER ,
+                  COLOUR_PINK     ,
+                  COLOUR_LIGHTPEACH]
 
 # wave limits
-MAX_BOMBERS   = 10
-MAX_BLOCKERS  = 8
-MAX_BRUTES    = 5
+MAX_BOMBERS   = 5
+MAX_BLOCKERS  = 5
+MAX_BRUTES    = 3
 MAX_WAVE_TIME = 60 # length of wave in seconds
 # scores
 SCORE_TARGET_HIT  = 250
@@ -78,21 +119,35 @@ myfont20 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 2
 myfont30 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 30)
 myfont80 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 80)
 
-SCOREFONT_TARGET_HIT  = myfont20.render(str(SCORE_TARGET_HIT) , 0, COLOUR_YELLOW)
-SCOREFONT_BOMBER_HIT  = myfont20.render(str(SCORE_BOMBER_HIT) , 0, COLOUR_YELLOW)
-SCOREFONT_BRUTE_HIT   = myfont20.render(str(SCORE_BRUTE_HIT)  , 0, COLOUR_YELLOW)
-SCOREFONT_BLOCKER_HIT = myfont20.render(str(SCORE_BLOCKER_HIT), 0, COLOUR_RED)
+SCOREFONT_TARGET_HIT  = myfont10.render(str(SCORE_TARGET_HIT) , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
+SCOREFONT_BOMBER_HIT  = myfont10.render(str(SCORE_BOMBER_HIT) , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
+SCOREFONT_BRUTE_HIT   = myfont10.render(str(SCORE_BRUTE_HIT)  , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
+SCOREFONT_BLOCKER_HIT = myfont10.render(str(SCORE_BLOCKER_HIT), 0, COLOUR_PALETTE[IDX_COLOUR_RED])
 
 image_target       = pygame.image.load(str(FILEPATH.joinpath('png' ,'target.png'))).convert()
+image_target_flash = pygame.image.load(str(FILEPATH.joinpath('png' ,'target_flash.png'))).convert()
 image_bomber       = pygame.image.load(str(FILEPATH.joinpath('png' ,'bomber.png'))).convert()
 image_bomber_flash = pygame.image.load(str(FILEPATH.joinpath('png' ,'bomber_flash.png'))).convert()
-image_brute       = pygame.image.load(str(FILEPATH.joinpath('png' ,'brute.png'))).convert()
+image_brute        = pygame.image.load(str(FILEPATH.joinpath('png' ,'brute.png'))).convert()
+image_brute_flash  = pygame.image.load(str(FILEPATH.joinpath('png' ,'brute_flash.png'))).convert()
+image_blocker      = pygame.image.load(str(FILEPATH.joinpath('png' ,'blocker.png'))).convert()
+image_base_horz    = pygame.image.load(str(FILEPATH.joinpath('png' ,'base_horizontal.png'))).convert()
+image_base_vert    = pygame.image.load(str(FILEPATH.joinpath('png' ,'base_vertical.png'))).convert()
+image_reticule     = pygame.image.load(str(FILEPATH.joinpath('png' ,'reticule.png'))).convert()
+image_tank         = pygame.image.load(str(FILEPATH.joinpath('png' ,'tank.png'))).convert()
 
 # set the transparent colour, in my case black
 image_target.set_colorkey(COLOUR_BLACK)
+image_target_flash.set_colorkey(COLOUR_BLACK)
 image_bomber.set_colorkey(COLOUR_BLACK)
 image_bomber_flash.set_colorkey(COLOUR_BLACK)
 image_brute.set_colorkey(COLOUR_BLACK)
+image_brute_flash.set_colorkey(COLOUR_BLACK)
+image_blocker.set_colorkey(COLOUR_BLACK)
+image_base_horz.set_colorkey(COLOUR_BLACK)
+image_base_vert.set_colorkey(COLOUR_BLACK)
+image_reticule.set_colorkey(COLOUR_BLACK)
+image_tank.set_colorkey(COLOUR_BLACK)
 
 #=======================================================================
 # Score Partical class
@@ -199,13 +254,13 @@ class ParticleSystem():
         self.killAll()
         for n in range(0, self.max_particles):
             if colour is None:
-                c = [random.randint(0,255), random.randint(0,255), random.randint(0,255)]
+                c = COLOUR_PALETTE[random.randint(0, 15)]
             else:
                 c = colour
             # vary the angle a little bit
             angle = (angle + random.uniform(-spread, spread)) % 360
             speed = random.uniform(0.1, 0.7)
-            size = random.randint(1, 10)
+            size = random.randint(4, 16)
             p = Partical(self.pos, angle, speed, size, c)
             self.particles.append(p)
             
@@ -215,20 +270,19 @@ class ParticleSystem():
         step = 360 // self.max_particles
         for n in range(0, self.max_particles):
             if colour is None:
-                c = [random.randint(0,255), random.randint(0,255), random.randint(0,255)]
+                c = COLOUR_PALETTE[random.randint(0, 15)]
             else:
                 c = colour
                 
             angle = n * step
             speed = random.uniform(0.1, 0.7)
-            size = random.randint(1, 14)
+            size = random.randint(4, 16)
             if size < 5 and random.random() > 0.6:
                 c = COLOUR_WHITE
             
             p = Partical(self.pos, angle, speed, size, c)
             self.particles.append(p)
     
-        
     def scoreBurst(self, scoreimage):
         
         self.killAll()
@@ -308,7 +362,7 @@ class Star():
         self.size = random.randint(1,4)
         self.image = pygame.Surface([self.size, self.size])
         self.rect = self.image.get_rect()
-        self.image.fill(COLOUR_STARS)
+        self.image.fill(COLOUR_BLUE)
 
     def reset(self):
         
@@ -371,7 +425,7 @@ class Cannonball():
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.acc = Vector2(0, 0)
-        self.size = 8
+        self.size = 4
         self.mass = 20
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
@@ -406,10 +460,13 @@ class Cannonball():
             self.pos.y = SCREEN_HEIGHT - self.size
             self.vel.mult(0)
             
+    def outOfPlay(self):
+        
+        return self.pos.x < 0 or self.pos.x > SCREEN_WIDTH or self.pos.y >= SCREEN_HEIGHT - self.size
+            
     def isDead(self):
         
-        # return true if ball is on the ground
-        return self.pos.y >= SCREEN_HEIGHT - self.size or self.dead
+        return self.outOfPlay() or self.dead
         
     def draw(self):
         
@@ -431,12 +488,25 @@ class Target():
         self.rect = pygame.Rect(x, y, self.width, self.height)
         self.image = image_target
         self.dead = False
+        self.lastflash = 0
+        self.thisframe = 0
+        self.flash = False
         
     def isDead(self):
         
         return self.dead == True
         
     def update(self):
+        
+        self.thisframe += 1
+        if self.thisframe - self.lastflash > 3:
+            self.flash = not self.flash
+            self.lastflash = self.thisframe
+        
+        if self.flash:
+            self.image = image_target_flash
+        else:
+            self.image = image_target
                 
         self.pos.add(self.vel)
         if self.pos.x < 0:
@@ -462,8 +532,7 @@ class Blocker():
         self.width = w
         self.height = h
         self.rect = pygame.Rect(x, y, self.width, self.height)
-        self.image = pygame.Surface([self.width, self.height])
-        self.image.fill(COLOUR_BLOCKER)
+        self.image = image_blocker
         self.dead = False
         
     def isDead(self):
@@ -553,10 +622,13 @@ class Brute():
         
         self.pos    = Vector2(x, y)
         self.vel    = Vector2(0, 0)
-        self.width  = 40
-        self.height = 40
+        self.width  = 32
+        self.height = 24
         self.rect   = pygame.Rect(x, y, self.width, self.height)
         self.image  = image_brute
+        self.lastflash = 0
+        self.thisframe = 0
+        self.flash = False
         self.dead   = False
         self.angle  = a
         self.radius = 1
@@ -574,6 +646,16 @@ class Brute():
         return self.dead == True
         
     def update(self):
+        
+        self.thisframe += 1
+        if self.thisframe - self.lastflash > 20:
+            self.flash = not self.flash
+            self.lastflash = self.thisframe
+        
+        if self.flash:
+            self.image = image_brute_flash
+        else:
+            self.image = image_brute
         
         self.radius += self.radius_step
         if self.radius < 0 or self.radius > 40:
@@ -603,15 +685,14 @@ class Brute():
 
 class Base():
 
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, img):
         
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.width = w
         self.height = h
         self.rect = pygame.Rect(x, y, self.width, self.height)
-        self.image = pygame.Surface([self.width, self.height])
-        self.image.fill(COLOUR_BASE)
+        self.image = img
         self.dead = False
         
     def isDead(self):
@@ -731,21 +812,25 @@ class Reticule():
         self.pos = Vector2(0,0)
         self.text_offset = 32
         self.xoff = 0
+        self.image = image_reticule
+        self.bullets_loaded = 0
         
-    def update(self, mousex, mousey):
+    def update(self, mousex, mousey, bullets_loaded):
         
         self.pos.x = mousex
         self.pos.y = mousey
-        
-    def microUpdate(self, value):
-        
-        self.xoff += value
+        self.bullets_loaded = bullets_loaded
         
     def draw(self):
         
-        pygame.draw.rect(screen,[255,255,255],[self.pos.x,self.pos.y, 2, 2])
-        pygame.draw.rect(screen,[200,200,200],[self.pos.x-9,self.pos.y-9, 20, 20], 1)
-        pygame.draw.line(screen, [0,0,100], [10,550], [self.pos.x,self.pos.y], 2)
+        screen.blit(image_tank,(10,550))
+        
+        x = 0
+        for n in range(0, self.bullets_loaded):
+            pygame.draw.rect(screen, COLOUR_PINK, [self.pos.x-32, (self.pos.y - 12) + x, 4, 4])
+            x += 10
+            
+        screen.blit(self.image,(self.pos.x -16,self.pos.y-16))
 
     
 # ======================================================================
@@ -767,6 +852,7 @@ class Game():
         self.wave_seconds       = 60
         self.wave_number        = 0
         self.maxballs           = 50
+        self.max_burst_fire     = 3
         self.shots_fired        = 0
         self.shots_fired_total  = 0
         self.shot_accuracy      = 0
@@ -775,7 +861,7 @@ class Game():
         self.brutes_killed      = 0
         self.blockers_hit       = 0
         self.bullet_bonus       = 0
-        self.cannon_pos_x       = 10
+        self.cannon_pos_x       = 30
         self.cannon_pos_y       = 550
         self.cannon_firepower   = 180
 
@@ -838,16 +924,18 @@ class Game():
         
         self.scoreboard.reset()
         self.psc.killAll()
+        self.spawnBases()
+        self.spawnWave()
+        
+    def spawnBases(self):
         
         self.bases = []
         for x in range(0, 2):
-            b = Base(400 + x * 300, 580, 150, 10)
+            b = Base(400 + x * 300, 580, 120, 16, image_base_horz)
             self.bases.append(b)
         for y in range(0, 2):
-            b = Base(10, 20 + y * 200, 10, 150)
-            self.bases.append(b)
-            
-        self.spawnWave()
+            b = Base(10, 20 + y * 200, 16, 120, image_base_vert)
+            self.bases.append(b)        
         
     def clearOldWave(self):
         
@@ -868,19 +956,19 @@ class Game():
     def spawnTargets(self):
         
         for x in range(0, 5 + self.wave_number):
-            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH + 500), random.randint(10, SCREEN_HEIGHT-100), 40, 40)
+            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH + 500), random.randint(10, SCREEN_HEIGHT-100), 40, 24)
             self.targets.append(t)
             
     def spawnBlockers(self):
         
         for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
-            b = Blocker(random.randint(1000, 1800), random.randint(10, SCREEN_HEIGHT-100), 3, 20)
+            b = Blocker(random.randint(1000, 1800), random.randint(10, SCREEN_HEIGHT-100), 8, 40)
             self.blockers.append(b)
             
     def spawnBombers(self):
         
         for x in range(0, min(self.wave_number, MAX_BOMBERS)):
-            b = Bomber(random.randint(400, 800), 0, 24, 24, 0.1 + (random.random() * 0.2), random.randint(0,360))
+            b = Bomber(random.randint(300, 900), random.randint(-400, 0), 32, 28, 0.1 + (random.random() * 0.4), random.randint(0,360))
             self.bombers.append(b)
             
     def spawnBrutes(self):
@@ -899,8 +987,8 @@ class Game():
                     x = SCREEN_WIDTH + random.randrange(0, SCREEN_WIDTH)
                     y = random.randrange(-200, SCREEN_HEIGHT + 200)
                 else:
-                    x = random.randrange(-200, SCREEN_WIDTH + 200)
-                    y = random.randrange(-200, 0)
+                    x = random.randrange(-500, SCREEN_WIDTH + 500)
+                    y = random.randrange(-1000, 0)
                 
                 b = Brute(x, y, tx, ty, random.randint(0,360))
                 self.brutes.append(b)
@@ -976,10 +1064,12 @@ class Game():
             for ball in self.balls:
                 if blocker.rect.colliderect(ball.rect):
                     if ball.vel.x > 0: #ball hit from the left
-                        ball.pos.x -= 4
-                    else:
-                        ball.pos.x += 4 # hit was from the right
-                    ball.vel.x = -ball.vel.x
+                        ball.vel.x = -ball.vel.x
+                        ball.pos.x -= 12
+                    elif ball.vel.x < 0:
+                        ball.vel.x = -ball.vel.x
+                        ball.pos.x += 12 # hit was from the right
+                    
                     self.blockers_hit += 1
                     self.scoreboard.add(SCORE_BLOCKER_HIT)
                     self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BLOCKER_HIT)
@@ -1017,7 +1107,7 @@ class Game():
         
     def fireCannon(self, mousex, mousey):
         
-        if self.shots_fired < self.maxballs:
+        if self.shots_fired < self.maxballs and len(self.balls) < self.max_burst_fire:
             b = Cannonball(self.cannon_pos_x, self.cannon_pos_y)
             f = Vector2(mousex, mousey)
             f.sub(b.pos)
@@ -1162,7 +1252,7 @@ class Game():
             
             self.wave_seconds = MAX_WAVE_TIME - (self.current_tick - self.wave_start_tick) // 60
             
-            self.reticule.update(mousex, mousey)
+            self.reticule.update(mousex, mousey, self.max_burst_fire - len(self.balls))
             
             if click:
                 self.fireCannon(mousex, mousey)
