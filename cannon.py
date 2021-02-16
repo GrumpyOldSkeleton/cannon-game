@@ -79,7 +79,7 @@ COLOUR_PALETTE = [COLOUR_BLACK    ,
 # wave limits
 MAX_BOMBERS   = 5
 MAX_BLOCKERS  = 5
-MAX_BRUTES    = 3
+MAX_BRUTES    = 5
 MAX_WAVE_TIME = 60 # length of wave in seconds
 # scores
 SCORE_TARGET_HIT  = 250
@@ -107,12 +107,20 @@ clock = pygame.time.Clock()
 # ======================================================================
 
 FILEPATH = pathlib.Path().cwd() 
+
+# load sound effects
 sound_boom      = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'boom.ogg')))
 sound_big_boom  = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'big_boom.ogg')))
 sound_gunfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'gunfire.ogg')))
 sound_dryfire   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'dryfire.ogg')))
 sound_blocker   = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'blocker.ogg')))
 sound_base_boom = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'base_explode.ogg')))
+
+# load background music
+#pygame.mixer.music.load(str(FILEPATH.joinpath('sounds' ,'rolemusic_the_black_frame.ogg')))
+sound_track_main           = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'rolemusic_the_black_frame.ogg')))
+sound_track_main_game_over = pygame.mixer.Sound(str(FILEPATH.joinpath('sounds' ,'rolemusic_yellow_dust.ogg')))
+
 
 myfont10 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 10)
 myfont20 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 20)
@@ -425,7 +433,7 @@ class Cannonball():
         self.pos = Vector2(x, y)
         self.vel = Vector2(0, 0)
         self.acc = Vector2(0, 0)
-        self.size = 4
+        self.size = 8
         self.mass = 20
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
@@ -797,7 +805,7 @@ class Scoreboard():
     def draw(self, fired, maxballs, wavenumber, seconds):
         
         msg = 'WAVE {} ::: FIRED {}/{} ::: SCORE {} ::: {}'.format(wavenumber, fired, maxballs, self.score, seconds)
-        textsurf = myfont30.render(msg, 0, COLOUR_RED)
+        textsurf = myfont20.render(msg, 0, COLOUR_RED)
         textsurf.set_alpha(160)
         screen.blit(textsurf, (40,20))
 
@@ -864,6 +872,11 @@ class Game():
         self.cannon_pos_x       = 30
         self.cannon_pos_y       = 550
         self.cannon_firepower   = 180
+        
+        self.targets_killed_this_wave = 0
+        self.bombers_killed_this_wave = 0
+        self.brutes_killed_this_wave  = 0
+        self.shot_accuracy_this_wave  = 0
 
         self.reticule   = Reticule()
         self.starfield  = StarField()
@@ -879,6 +892,12 @@ class Game():
         self.recording = []
         
         self.gravity = Vector2(0,0.3)
+        
+        # start the background music
+        #pygame.mixer.music.set_volume(0.2)
+        #pygame.mixer.music.play(-1)
+        #sound_track_main.set_volume(0.2)
+        #sound_track_main.play(-1)
         
         self.startGame()
 
@@ -897,11 +916,6 @@ class Game():
         drag.mult(dragMag)
         return drag
         
-    def reload(self):
-        
-        self.shots_fired = 0
-        self.balls = []
-       
     def startReplay(self):
         
         self.gamemode = GAME_MODE_REPLAY
@@ -922,11 +936,15 @@ class Game():
         self.brutes_killed      = 0
         self.blockers_hit       = 0
         
+        self.targets_killed_this_wave = 0
+        self.bombers_killed_this_wave = 0
+        self.brutes_killed_this_wave  = 0
+        
         self.scoreboard.reset()
         self.psc.killAll()
         self.spawnBases()
         self.spawnWave()
-        
+
     def spawnBases(self):
         
         self.bases = []
@@ -947,22 +965,30 @@ class Game():
     def prepareWave(self):
         
         self.clearOldWave()
-        self.reload()
+        self.balls = []
         self.wave_start_tick = self.current_tick
         self.wave_seconds = MAX_WAVE_TIME
         self.bullet_bonus = 0
         self.wave_number += 1
         
+        # reset wave target hits
+        self.targets_killed_this_wave = 0
+        self.bombers_killed_this_wave = 0
+        self.brutes_killed_this_wave  = 0  
+        self.shot_accuracy_this_wave  = 0  
+        self.shots_fired              = 0 
+
+        
     def spawnTargets(self):
         
         for x in range(0, 5 + self.wave_number):
-            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH + 500), random.randint(10, SCREEN_HEIGHT-100), 40, 24)
+            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-100), 40, 24)
             self.targets.append(t)
             
     def spawnBlockers(self):
         
         for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
-            b = Blocker(random.randint(1000, 1800), random.randint(10, SCREEN_HEIGHT-100), 8, 40)
+            b = Blocker(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-100), 32, 40)
             self.blockers.append(b)
             
     def spawnBombers(self):
@@ -1005,6 +1031,18 @@ class Game():
 
     def checkCollisions(self):
         
+        self.collideBrutesWithBases()
+        self.collideBrutesWithBalls()
+        self.collideBallsWithBases()
+        self.collideTargetsWithBases()
+        self.collideBombersWithBases()
+        self.collideBombersWithBalls()
+        self.collideBlockersWithBalls()
+        self.collideTargetsWithBalls()
+        self.clearTheDead()   
+        
+    def collideBrutesWithBases(self):
+        
         # do brute collisions
         for brute in self.brutes:
             for base in self.bases:
@@ -1012,7 +1050,9 @@ class Game():
                     brute.dead = True
                     base.dead  = True
                     self.psc.spawnBurstDirection(brute.pos.x, brute.pos.y, 270, 2, 50)
-                    sound_base_boom.play()
+                    sound_base_boom.play()      
+        
+    def collideBrutesWithBalls(self):
         
         for brute in self.brutes:
             for ball in self.balls:
@@ -1020,10 +1060,13 @@ class Game():
                     brute.dead = True
                     ball.dead  = True
                     self.brutes_killed += 1
+                    self.brutes_killed_this_wave += 1
                     self.scoreboard.add(SCORE_BRUTE_HIT)
                     self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 2, 50)
                     self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BRUTE_HIT)
                     sound_big_boom.play()
+    
+    def collideBallsWithBases(self):
         
         for ball in self.balls:
             for base in self.bases:
@@ -1032,64 +1075,83 @@ class Game():
                     ball.dead = True
                     self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 2, 100)
                     sound_base_boom.play()
-                    
+        
+    def collideTargetsWithBases(self):
+        
         for target in self.targets:
-            for base in self.bases:
-                if target.rect.colliderect(base.rect):
-                    base.dead = True
-                    target.dead = True
-                    self.psc.spawnBurstCircle(target.pos.x, target.pos.y, 50, COLOUR_YELLOW)
-                    sound_base_boom.play()
+            if target.pos.x <= SCREEN_WIDTH: # check only if onscreen
+                for base in self.bases:
+                    if target.rect.colliderect(base.rect):
+                        base.dead = True
+                        target.dead = True
+                        self.psc.spawnBurstCircle(target.pos.x, target.pos.y, 50, COLOUR_YELLOW)
+                        sound_base_boom.play()
+        
+    def collideBombersWithBases(self):
         
         for bomber in self.bombers:
-            for base in self.bases:
-                if bomber.rect.colliderect(base.rect):
-                    base.dead = True
-                    bomber.dead = True
-                    self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
-                    sound_base_boom.play()
-                    
+            if bomber.pos.y > 0: # check only if onscreen
+                for base in self.bases:
+                    if bomber.rect.colliderect(base.rect):
+                        base.dead = True
+                        bomber.dead = True
+                        self.psc.spawnBurstDirection(bomber.pos.x, bomber.pos.y, 270, 20, 200)
+                        sound_base_boom.play()
+        
+    def collideBombersWithBalls(self):
+        
         for bomber in self.bombers:
-            for ball in self.balls:
-                if bomber.rect.colliderect(ball.rect):
-                    bomber.dead = True
-                    ball.dead = True
-                    self.bombers_killed += 1
-                    self.scoreboard.add(SCORE_BOMBER_HIT)
-                    self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 20, 50, COLOUR_YELLOW)
-                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BOMBER_HIT)
-                    sound_big_boom.play()
-                    
+            if bomber.pos.y > 0: # check only if onscreen
+                for ball in self.balls:
+                    if bomber.rect.colliderect(ball.rect):
+                        bomber.dead = True
+                        ball.dead = True
+                        self.bombers_killed += 1
+                        self.bombers_killed_this_wave += 1
+                        self.scoreboard.add(SCORE_BOMBER_HIT)
+                        self.psc.spawnBurstDirection(ball.pos.x, ball.pos.y, 270, 20, 50, COLOUR_YELLOW)
+                        self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BOMBER_HIT)
+                        sound_big_boom.play()        
+        
+    def collideBlockersWithBalls(self):
+        
         for blocker in self.blockers:
-            for ball in self.balls:
-                if blocker.rect.colliderect(ball.rect):
-                    if ball.vel.x > 0: #ball hit from the left
-                        ball.vel.x = -ball.vel.x
-                        ball.pos.x -= 12
-                    elif ball.vel.x < 0:
-                        ball.vel.x = -ball.vel.x
-                        ball.pos.x += 12 # hit was from the right
-                    
-                    self.blockers_hit += 1
-                    self.scoreboard.add(SCORE_BLOCKER_HIT)
-                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BLOCKER_HIT)
-                    sound_blocker.play()
- 
+            if blocker.pos.x <= SCREEN_WIDTH: # only do collision checks if is onscreen
+                for ball in self.balls:
+                    if blocker.rect.colliderect(ball.rect):
+                        if ball.vel.x > 0: #ball hit from the left
+                            ball.vel.x = -ball.vel.x
+                            ball.pos.x -= 16
+                        elif ball.vel.x < 0:
+                            ball.vel.x = -ball.vel.x
+                            ball.pos.x += 16 # hit was from the right
+                        
+                        self.blockers_hit += 1
+                        self.scoreboard.add(SCORE_BLOCKER_HIT)
+                        self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BLOCKER_HIT)
+                        sound_blocker.play()
+        
+    def collideTargetsWithBalls(self):
+        
         for target in self.targets:
-            for ball in self.balls:
-                if not target.isDead() and target.rect.colliderect(ball.rect):
-                    target.dead = True
-                    ball.dead = True
-                    self.targets_killed += 1
-                    self.scoreboard.add(SCORE_TARGET_HIT)
-                    boomsize = random.randint(5, 30)
-                    self.psc.spawnBurstCircle(ball.pos.x, ball.pos.y, boomsize, COLOUR_RED)
-                    self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_TARGET_HIT)
-                    if boomsize > 20:
-                        sound_big_boom.play()
-                    else:
-                        sound_boom.play()
-                    
+            if target.pos.x <= SCREEN_WIDTH: # only do collision checks if the target is onscreen
+                for ball in self.balls:
+                    if not target.isDead() and target.rect.colliderect(ball.rect):
+                        target.dead = True
+                        ball.dead = True
+                        self.targets_killed += 1
+                        self.targets_killed_this_wave += 1
+                        self.scoreboard.add(SCORE_TARGET_HIT)
+                        boomsize = random.randint(5, 30)
+                        self.psc.spawnBurstCircle(ball.pos.x, ball.pos.y, boomsize, COLOUR_RED)
+                        self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_TARGET_HIT)
+                        if boomsize > 20:
+                            sound_big_boom.play()
+                        else:
+                            sound_boom.play()        
+        
+    def clearTheDead(self):
+        
         tc = [t for t in self.targets if not t.isDead()]
         self.targets = tc
         
@@ -1104,6 +1166,7 @@ class Game():
         
         br = [b for b in self.brutes if not b.isDead()]
         self.brutes = br
+        
         
     def fireCannon(self, mousex, mousey):
         
@@ -1127,13 +1190,21 @@ class Game():
             self.gamemode = GAME_MODE_LIVE
             self.clearReplayRecording()
             self.startGame()
+            self.playGameMainSong()
             self.gamestate = GAME_STATE_IN_PROGRESS
     
     def clearReplayRecording(self):
         
         self.recording = []
             
-    def doWaveOver(self):
+    def updateGameStats(self):
+
+        # _this_wave fields are reset to zero in prepareWave()
+    
+        if self.shots_fired > 0:
+            self.shot_accuracy_this_wave = ((self.targets_killed_this_wave + self.bombers_killed_this_wave + self.brutes_killed_this_wave) / self.shots_fired) * 100
+        else:
+            self.shot_accuracy_this_wave = 0
         
         # calculates the bonus and stats at wave end
         self.bullet_bonus = (self.maxballs - self.shots_fired) * (10 * len(self.bases))
@@ -1143,7 +1214,7 @@ class Game():
         if self.shots_fired_total > 0:
             self.shot_accuracy = (total_kills_so_far / self.shots_fired_total) * 100
         else:
-            self.shots_fired_total = 0
+            self.shot_accuracy = 0
             
         self.scoreboard.add(self.bullet_bonus)
                
@@ -1162,9 +1233,9 @@ class Game():
         self.gamestate_delay += 1
         
         if self.gamestate_delay == 1:
-            self.doWaveOver()
+            self.updateGameStats()
         else:            
-            textsurf = myfont80.render('WAVE COMPLETE!', 0, COLOUR_RED)
+            textsurf = myfont80.render('WAVE SURVIVED!', 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,20))
             
@@ -1179,15 +1250,20 @@ class Game():
             textsurf = myfont20.render('brutes killed ... ' + str(self.brutes_killed), 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,220))
-        
-            msg = 'accuracy ... {:.2f}'.format(self.shot_accuracy)
+            
+            msg = 'wave accuracy ... {:.2f}'.format(self.shot_accuracy_this_wave)
             textsurf = myfont20.render(msg, 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,260))
+        
+            msg = 'game accuracy ... {:.2f}'.format(self.shot_accuracy)
+            textsurf = myfont20.render(msg, 0, COLOUR_RED)
+            textsurf.set_alpha(150)
+            screen.blit(textsurf, (20,300))
 
             textsurf = myfont20.render('bullet bonus ... ' + str(self.bullet_bonus), 0, COLOUR_RED)
             textsurf.set_alpha(100)
-            screen.blit(textsurf, (20,300))
+            screen.blit(textsurf, (20,340))
 
         if self.gamestate_delay > self.fps * 5:
             self.gamestate = GAME_STATE_IN_PROGRESS
@@ -1197,9 +1273,26 @@ class Game():
     def drawLastBaseLost(self):
         
         self.gamestate_delay += 1
-        if self.gamestate_delay > self.fps * 4:
+        
+        if self.gamestate_delay == 1:
+            self.updateGameStats() 
+            self.playGameOverSong()
+            
+        elif self.gamestate_delay > self.fps * 4:
             self.gamestate = GAME_STATE_OVER
             self.gamestate_delay = 0
+       
+    def playGameOverSong(self):
+        
+        sound_track_main.fadeout(500)
+        sound_track_main_game_over.set_volume(0.2)
+        sound_track_main_game_over.play()
+        
+    def playGameMainSong(self):
+        
+        sound_track_main_game_over.stop()
+        sound_track_main.set_volume(0.2)
+        sound_track_main.play(-1)
         
     def drawGameOver(self):
         
@@ -1318,7 +1411,8 @@ class Game():
             self.starfield.update()
             self.starfield.draw()
             self.psc.update()
-            self.drawLastBaseLost()            
+            self.drawLastBaseLost()
+            pygame.mixer.music.stop()
             
         elif self.gamestate == GAME_STATE_OVER:
             
