@@ -77,15 +77,15 @@ COLOUR_PALETTE = [COLOUR_BLACK    ,
                   COLOUR_LIGHTPEACH]
 
 # wave limits
-MAX_BOMBERS   = 5
-MAX_BLOCKERS  = 5
-MAX_BRUTES    = 5
-MAX_WAVE_TIME = 60 # length of wave in seconds
+MAX_BOMBERS   = 8
+MAX_BLOCKERS  = 10
+MAX_BRUTES    = 10
+MAX_WAVE_TIME = 120 # length of wave in seconds
+
 # scores
 SCORE_TARGET_HIT  = 250
 SCORE_BOMBER_HIT  = 500
 SCORE_BRUTE_HIT   = 1000
-SCORE_BLOCKER_HIT = -250
 
 
 # ======================================================================
@@ -130,7 +130,6 @@ myfont80 = pygame.font.Font(str(FILEPATH.joinpath('assets' ,'digitalix.ttf')), 8
 SCOREFONT_TARGET_HIT  = myfont10.render(str(SCORE_TARGET_HIT) , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
 SCOREFONT_BOMBER_HIT  = myfont10.render(str(SCORE_BOMBER_HIT) , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
 SCOREFONT_BRUTE_HIT   = myfont10.render(str(SCORE_BRUTE_HIT)  , 0, COLOUR_PALETTE[IDX_COLOUR_YELLOW])
-SCOREFONT_BLOCKER_HIT = myfont10.render(str(SCORE_BLOCKER_HIT), 0, COLOUR_PALETTE[IDX_COLOUR_RED])
 
 image_target       = pygame.image.load(str(FILEPATH.joinpath('png' ,'target.png'))).convert()
 image_target_flash = pygame.image.load(str(FILEPATH.joinpath('png' ,'target_flash.png'))).convert()
@@ -437,7 +436,7 @@ class Cannonball():
         self.mass = 20
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.image = pygame.Surface([self.size, self.size])
-        self.image.fill(COLOUR_WHITE)
+        self.image.fill(COLOUR_PINK)
         self.isflying = False
         self.dead = False
         
@@ -490,7 +489,7 @@ class Target():
     def __init__(self, x, y, w, h):
         
         self.pos = Vector2(x, y)
-        self.vel = Vector2(-0.5 + random.random() * -1.5, 0)
+        self.vel = Vector2(-0.5 + random.random() * -2.5, 0)
         self.width = w
         self.height = h
         self.rect = pygame.Rect(x, y, self.width, self.height)
@@ -818,8 +817,6 @@ class Reticule():
     def __init__(self):
         
         self.pos = Vector2(0,0)
-        self.text_offset = 32
-        self.xoff = 0
         self.image = image_reticule
         self.bullets_loaded = 0
         
@@ -835,7 +832,7 @@ class Reticule():
         
         x = 0
         for n in range(0, self.bullets_loaded):
-            pygame.draw.rect(screen, COLOUR_PINK, [self.pos.x-32, (self.pos.y - 12) + x, 4, 4])
+            pygame.draw.rect(screen, COLOUR_PINK, [self.pos.x-32, (self.pos.y - 20) + x, 8, 8])
             x += 10
             
         screen.blit(self.image,(self.pos.x -16,self.pos.y-16))
@@ -860,7 +857,7 @@ class Game():
         self.wave_seconds       = 60
         self.wave_number        = 0
         self.maxballs           = 50
-        self.max_burst_fire     = 3
+        self.max_burst_fire     = 4
         self.shots_fired        = 0
         self.shots_fired_total  = 0
         self.shot_accuracy      = 0
@@ -893,17 +890,12 @@ class Game():
         
         self.gravity = Vector2(0,0.3)
         
-        # start the background music
-        #pygame.mixer.music.set_volume(0.2)
-        #pygame.mixer.music.play(-1)
-        #sound_track_main.set_volume(0.2)
-        #sound_track_main.play(-1)
-        
         self.startGame()
 
     def toggleSlowMotion(self):
         
-        self.slowmotion = not self.slowmotion
+        if self.gamemode == GAME_MODE_REPLAY:
+            self.slowmotion = not self.slowmotion
 
     def getDrag(self, ball):
         
@@ -918,10 +910,12 @@ class Game():
         
     def startReplay(self):
         
-        self.gamemode = GAME_MODE_REPLAY
-        self.replay_length = len(self.recording)
-        self.startGame()
-        self.gamestate = GAME_STATE_IN_PROGRESS   
+        if self.gamestate == GAME_STATE_OVER:
+            self.gamemode = GAME_MODE_REPLAY
+            self.replay_length = len(self.recording)
+            self.startGame()
+            self.playGameMainSong()
+            self.gamestate = GAME_STATE_IN_PROGRESS   
         
     def startGame(self):
         
@@ -952,7 +946,7 @@ class Game():
             b = Base(400 + x * 300, 580, 120, 16, image_base_horz)
             self.bases.append(b)
         for y in range(0, 2):
-            b = Base(10, 20 + y * 200, 16, 120, image_base_vert)
+            b = Base(10, 60 + y * 200, 16, 120, image_base_vert)
             self.bases.append(b)        
         
     def clearOldWave(self):
@@ -982,13 +976,13 @@ class Game():
     def spawnTargets(self):
         
         for x in range(0, 5 + self.wave_number):
-            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-100), 40, 24)
+            t = Target(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-200), 40, 24)
             self.targets.append(t)
             
     def spawnBlockers(self):
         
         for x in range(0, min(self.wave_number, MAX_BLOCKERS)):
-            b = Blocker(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-100), 32, 40)
+            b = Blocker(random.randint(SCREEN_WIDTH, SCREEN_WIDTH * 2), random.randint(10, SCREEN_HEIGHT-200), 32, 40)
             self.blockers.append(b)
             
     def spawnBombers(self):
@@ -1119,16 +1113,26 @@ class Game():
             if blocker.pos.x <= SCREEN_WIDTH: # only do collision checks if is onscreen
                 for ball in self.balls:
                     if blocker.rect.colliderect(ball.rect):
-                        if ball.vel.x > 0: #ball hit from the left
-                            ball.vel.x = -ball.vel.x
-                            ball.pos.x -= 16
-                        elif ball.vel.x < 0:
-                            ball.vel.x = -ball.vel.x
-                            ball.pos.x += 16 # hit was from the right
+                        
+                        # check bottom hit
+                        if abs(blocker.rect.bottom - ball.rect.top) < 10 and ball.vel.y < 0:
+                            ball.vel.y *= -1
+                            
+                        # check top hit
+                        if abs(blocker.rect.top - ball.rect.bottom) < 10 and ball.vel.y > 0:
+                            ball.vel.y *= -1
+                            
+                        # check left hit
+                        if abs(blocker.rect.left - ball.rect.right) < 10 and ball.vel.x > 0:
+                            ball.vel.x *= -1
+                            ball.pos.x -= 8
+                            
+                         # check right hit
+                        if abs(blocker.rect.right - ball.rect.left) < 10 and ball.vel.x < 0:
+                            ball.vel.x *= -1 
+                            ball.pos.x += 8
                         
                         self.blockers_hit += 1
-                        self.scoreboard.add(SCORE_BLOCKER_HIT)
-                        self.psc.spawnScoreBurst(ball.pos.x, ball.pos.y,SCOREFONT_BLOCKER_HIT)
                         sound_blocker.play()
         
     def collideTargetsWithBalls(self):
@@ -1235,7 +1239,7 @@ class Game():
         if self.gamestate_delay == 1:
             self.updateGameStats()
         else:            
-            textsurf = myfont80.render('WAVE SURVIVED!', 0, COLOUR_RED)
+            textsurf = myfont80.render('wave over!', 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,20))
             
