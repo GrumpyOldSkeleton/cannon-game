@@ -142,6 +142,7 @@ image_base_horz    = pygame.image.load(str(FILEPATH.joinpath('png' ,'base_horizo
 image_base_vert    = pygame.image.load(str(FILEPATH.joinpath('png' ,'base_vertical.png'))).convert()
 image_reticule     = pygame.image.load(str(FILEPATH.joinpath('png' ,'reticule.png'))).convert()
 image_tank         = pygame.image.load(str(FILEPATH.joinpath('png' ,'tank.png'))).convert()
+image_bunny1       = pygame.image.load(str(FILEPATH.joinpath('png' ,'bunny1.png'))).convert()
 
 # set the transparent colour, in my case black
 image_target.set_colorkey(COLOUR_BLACK)
@@ -155,6 +156,7 @@ image_base_horz.set_colorkey(COLOUR_BLACK)
 image_base_vert.set_colorkey(COLOUR_BLACK)
 image_reticule.set_colorkey(COLOUR_BLACK)
 image_tank.set_colorkey(COLOUR_BLACK)
+image_bunny1.set_colorkey(COLOUR_BLACK)
 
 #=======================================================================
 # Score Partical class
@@ -820,10 +822,15 @@ class Reticule():
         self.image = image_reticule
         self.bullets_loaded = 0
         
+        
+    def lerp(self, mn, mx, norm):
+        
+        return math.ceil(((mx - mn) * norm + mn))
+        
     def update(self, mousex, mousey, bullets_loaded):
         
-        self.pos.x = mousex
-        self.pos.y = mousey
+        self.pos.x = self.lerp(self.pos.x, mousex, 0.2)
+        self.pos.y = self.lerp(self.pos.y, mousey, 0.2)
         self.bullets_loaded = bullets_loaded
         
     def draw(self):
@@ -849,7 +856,7 @@ class Game():
         self.gamemode           = GAME_MODE_LIVE
         self.gamestate          = GAME_STATE_INTRO
         self.slowmotion         = False
-        self.fps                = 60
+        self.fps                = 50
         self.replay_length      = 0
         self.gamestate_delay    = 0
         self.current_tick       = 0
@@ -1224,13 +1231,17 @@ class Game():
                
     def drawIntroScreen(self):
         
-        textsurf = myfont80.render('CANNON', 0, COLOUR_RED)
-        textsurf.set_alpha(255)
+        textsurf = myfont80.render('LAST', 0, COLOUR_RED)
+        textsurf.set_alpha(160)
         screen.blit(textsurf, (20,20))
+        textsurf = myfont80.render('BUNNER!', 0, COLOUR_RED)
+        textsurf.set_alpha(255)
+        screen.blit(textsurf, (20,120))
         textsurf = myfont30.render('press spacebar!', 0, COLOUR_RED)
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,540))
         self.scoreboard.drawHighScoreTable()
+        screen.blit(image_bunny1, (486, 64))
         
     def drawWaveOver(self):
         
@@ -1239,33 +1250,33 @@ class Game():
         if self.gamestate_delay == 1:
             self.updateGameStats()
         else:            
-            textsurf = myfont80.render('wave over!', 0, COLOUR_RED)
+            textsurf = myfont80.render('Wave Cleared!', 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,20))
             
-            textsurf = myfont20.render('targets killed ... ' + str(self.targets_killed), 0, COLOUR_RED)
+            textsurf = myfont20.render('Targets killed ... ' + str(self.targets_killed), 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,140))
             
-            textsurf = myfont20.render('bombers killed ... ' + str(self.bombers_killed), 0, COLOUR_RED)
+            textsurf = myfont20.render('Bombers killed ... ' + str(self.bombers_killed), 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,180))
             
-            textsurf = myfont20.render('brutes killed ... ' + str(self.brutes_killed), 0, COLOUR_RED)
+            textsurf = myfont20.render('Brutes killed ... ' + str(self.brutes_killed), 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,220))
             
-            msg = 'wave accuracy ... {:.2f}'.format(self.shot_accuracy_this_wave)
+            msg = 'Wave accuracy ... {:.2f}'.format(self.shot_accuracy_this_wave)
             textsurf = myfont20.render(msg, 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,260))
         
-            msg = 'game accuracy ... {:.2f}'.format(self.shot_accuracy)
+            msg = 'Game accuracy ... {:.2f}'.format(self.shot_accuracy)
             textsurf = myfont20.render(msg, 0, COLOUR_RED)
             textsurf.set_alpha(150)
             screen.blit(textsurf, (20,300))
 
-            textsurf = myfont20.render('bullet bonus ... ' + str(self.bullet_bonus), 0, COLOUR_RED)
+            textsurf = myfont20.render('Bullet bonus ... ' + str(self.bullet_bonus), 0, COLOUR_RED)
             textsurf.set_alpha(100)
             screen.blit(textsurf, (20,340))
 
@@ -1304,24 +1315,24 @@ class Game():
         textsurf.set_alpha(255)
         screen.blit(textsurf, (20,20))
         
-        textsurf = myfont20.render('targets killed ... ' + str(self.targets_killed), 0, COLOUR_RED)
+        textsurf = myfont20.render('Targets killed ... ' + str(self.targets_killed), 0, COLOUR_RED)
         textsurf.set_alpha(200)
         screen.blit(textsurf, (20,140))
         
-        textsurf = myfont20.render('bombers killed ... ' + str(self.bombers_killed), 0, COLOUR_RED)
+        textsurf = myfont20.render('Bombers killed ... ' + str(self.bombers_killed), 0, COLOUR_RED)
         textsurf.set_alpha(200)
         screen.blit(textsurf, (20,180))
         
-        textsurf = myfont20.render('brutes killed ... ' + str(self.brutes_killed), 0, COLOUR_RED)
+        textsurf = myfont20.render('Brutes killed ... ' + str(self.brutes_killed), 0, COLOUR_RED)
         textsurf.set_alpha(200)
         screen.blit(textsurf, (20,220))
     
-        msg = 'accuracy ... {:.2f}'.format(self.shot_accuracy)
+        msg = 'Accuracy ... {:.2f}'.format(self.shot_accuracy)
         textsurf = myfont20.render(msg, 0, COLOUR_RED)
         textsurf.set_alpha(200)
         screen.blit(textsurf, (20,260))
         
-        textsurf = myfont30.render('You Scored...{}'.format(self.scoreboard.score), 0, COLOUR_RED)
+        textsurf = myfont30.render('You Scored ... {}'.format(self.scoreboard.score), 0, COLOUR_RED)
         textsurf.set_alpha(200)
         screen.blit(textsurf, (20,300))
         
